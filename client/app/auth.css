@@ -1,0 +1,261 @@
+/* ─── Carbon Ledger Auth Styles ─── */
+/* Matches dashboard.css design tokens exactly */
+
+:root {
+  --auth-green:        #2d6a4f;
+  --auth-green-light:  #d1fae5;
+  --auth-green-dark:   #065f46;
+  --auth-green-hover:  #245a42;
+  --auth-surface:      #111111;
+  --auth-card:         #1a1a1a;
+  --auth-card-border:  rgba(255, 255, 255, 0.08);
+  --auth-input-bg:     #222222;
+  --auth-input-border: rgba(255, 255, 255, 0.12);
+  --auth-input-focus:  #2d6a4f;
+  --auth-text-primary: #f3f4f6;
+  --auth-text-muted:   #9ca3af;
+  --auth-text-label:   #d1d5db;
+  --auth-error-bg:     rgba(220, 38, 38, 0.12);
+  --auth-error-border: rgba(220, 38, 38, 0.3);
+  --auth-error-text:   #f87171;
+  --auth-success-bg:   rgba(34, 197, 94, 0.12);
+  --auth-success-border: rgba(34, 197, 94, 0.3);
+  --auth-success-text: #4ade80;
+}
+
+/* ─── Reset — must mirror dashboard.css ─── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ─── Shell ─── */
+.auth-shell {
+  min-height: 100vh;
+  background: var(--auth-surface);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+/* ─── Brand header (above card) ─── */
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2rem;
+}
+
+.auth-leaf {
+  width: 36px;
+  height: 36px;
+  background: var(--auth-green);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.auth-brand-name {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  color: var(--auth-text-primary);
+}
+
+.auth-brand-sub {
+  font-size: 11px;
+  color: var(--auth-text-muted);
+  margin-top: 1px;
+}
+
+/* ─── Card ─── */
+.auth-card {
+  background: var(--auth-card);
+  border: 1px solid var(--auth-card-border);
+  border-radius: 16px;
+  padding: 2rem 2.25rem;
+  width: 100%;
+  max-width: 420px;
+}
+
+.auth-card-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--auth-text-primary);
+  text-align: center;
+  margin-bottom: 0.35rem;
+  letter-spacing: -0.3px;
+}
+
+.auth-card-subtitle {
+  font-size: 13px;
+  color: var(--auth-text-muted);
+  text-align: center;
+  margin-bottom: 1.75rem;
+}
+
+/* ─── Alerts ─── */
+.auth-alert {
+  padding: 10px 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  margin-bottom: 1.1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.auth-alert.error {
+  background: var(--auth-error-bg);
+  border: 1px solid var(--auth-error-border);
+  color: var(--auth-error-text);
+}
+
+.auth-alert.success {
+  background: var(--auth-success-bg);
+  border: 1px solid var(--auth-success-border);
+  color: var(--auth-success-text);
+}
+
+/* ─── Form fields ─── */
+.auth-field {
+  margin-bottom: 1.1rem;
+}
+
+.auth-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--auth-text-label);
+  margin-bottom: 6px;
+  letter-spacing: 0.01em;
+}
+
+.auth-input {
+  width: 100%;
+  background: var(--auth-input-bg);
+  border: 1px solid var(--auth-input-border);
+  border-radius: 9px;
+  padding: 10px 13px;
+  font-size: 14px;
+  color: var(--auth-text-primary);
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  /* Fix: prevent any global style interference */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.auth-input::placeholder {
+  color: var(--auth-text-muted);
+  opacity: 0.6;
+}
+
+.auth-input:focus {
+  border-color: var(--auth-input-focus);
+  box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.18);
+}
+
+/* ─── Submit button ─── */
+.auth-submit {
+  width: 100%;
+  background: var(--auth-green);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px;
+  border-radius: 9px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  margin-top: 0.5rem;
+  margin-bottom: 1.25rem;
+  transition: background 0.15s, opacity 0.15s;
+  letter-spacing: 0.01em;
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: var(--auth-green-hover);
+}
+
+.auth-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ─── Divider ─── */
+.auth-divider {
+  height: 1px;
+  background: var(--auth-card-border);
+  margin: 0.25rem 0 1.25rem;
+}
+
+/* ─── Footer link ─── */
+.auth-footer {
+  text-align: center;
+  font-size: 13px;
+  color: var(--auth-text-muted);
+}
+
+.auth-link {
+  color: #4ade80;
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+
+.auth-link:hover {
+  opacity: 0.75;
+}
+
+/* ─── Loading spinner inside button ─── */
+.auth-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: auth-spin 0.7s linear infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Trust badges (below card) ─── */
+.auth-trust {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.auth-trust-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--auth-text-muted);
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 1.5rem 1.25rem;
+    border-radius: 12px;
+  }
+}

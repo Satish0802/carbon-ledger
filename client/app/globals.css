@@ -1,0 +1,16 @@
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+ 
+body {
+  margin: 0;
+  padding: 0;
+}
+ 
+/* Prevent flash of unstyled content on dark pages */
+html,
+body {
+  background: #111111;
+}

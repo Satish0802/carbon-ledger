@@ -1,0 +1,236 @@
+/* ── Shell ── */
+.calc-shell {
+  min-height: 100vh;
+  background: var(--surface, #f5f6f4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem 4rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  .calc-shell { --surface: #111; --card: #1a1a1a; --border: rgba(255,255,255,0.08); --text: #f3f4f6; --muted: #9ca3af; --track: #2a2a2a; --input-bg: #252525; }
+}
+@media (prefers-color-scheme: light) {
+  .calc-shell { --surface: #f5f6f4; --card: #fff; --border: rgba(0,0,0,0.08); --text: #111827; --muted: #6b7280; --track: #f3f4f6; --input-bg: #fff; }
+}
+
+/* ── Layout ── */
+.calc-container {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Top bar (mirrors dashboard) ── */
+.calc-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+.calc-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.calc-leaf {
+  width: 32px; height: 32px;
+  background: #2d6a4f;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.calc-brand-name {
+  font-size: 16px; font-weight: 600; color: var(--text);
+}
+.calc-back-btn {
+  font-size: 12px; font-weight: 500;
+  padding: 6px 13px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.calc-back-btn:hover { background: var(--border); }
+
+/* ── Step nav ── */
+.calc-steps {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 1.5rem;
+}
+.calc-step-pill {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 10px; color: var(--muted); font-weight: 500;
+  text-align: center;
+  transition: all .2s;
+}
+.calc-step-pill.active {
+  background: #2d6a4f;
+  border-color: #2d6a4f;
+  color: #fff;
+}
+.calc-step-pill.done {
+  background: #d1fae5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+.calc-step-icon { font-size: 16px; }
+
+/* ── Card ── */
+.calc-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.5rem 1.5rem 1.25rem;
+}
+
+.calc-card-header {
+  margin-bottom: 1.25rem;
+}
+.calc-card-title {
+  font-size: 18px; font-weight: 700; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 4px;
+}
+.calc-card-sub {
+  font-size: 12px; color: var(--muted);
+}
+
+/* ── Fields ── */
+.calc-field {
+  margin-bottom: 1.1rem;
+}
+.calc-label {
+  display: block;
+  font-size: 12px; font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.calc-field input,
+.calc-field select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--input-bg);
+  transition: border-color .15s, box-shadow .15s;
+  appearance: auto;
+}
+.calc-field input:focus,
+.calc-field select:focus {
+  outline: none;
+  border-color: #2d6a4f;
+  box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.15);
+}
+.calc-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ── Radio cards (diet step) ── */
+.calc-radio-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.calc-radio-card {
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all .15s;
+  background: var(--input-bg);
+}
+.calc-radio-card:hover { border-color: #2d6a4f; }
+.calc-radio-card.selected {
+  border-color: #2d6a4f;
+  background: #d1fae5;
+}
+@media (prefers-color-scheme: dark) {
+  .calc-radio-card.selected { background: rgba(45,106,79,0.25); }
+}
+.calc-radio-label {
+  font-size: 13px; font-weight: 600; color: var(--text);
+}
+.calc-radio-sub {
+  font-size: 11px; color: var(--muted); margin-top: 2px;
+}
+
+/* ── Actions ── */
+.calc-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.calc-btn-back {
+  font-size: 13px; font-weight: 500;
+  padding: 8px 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.calc-btn-back:hover { background: var(--border); }
+.calc-btn-next {
+  font-size: 13px; font-weight: 600;
+  padding: 9px 22px;
+  border: none;
+  border-radius: 8px;
+  background: #2d6a4f;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.calc-btn-next:hover { opacity: .88; }
+.calc-btn-next:disabled { background: #9ca3af; cursor: not-allowed; }
+
+/* ── Error ── */
+.calc-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+/* ── Progress bar ── */
+.calc-progress-wrap {
+  height: 3px;
+  background: var(--track);
+  border-radius: 2px;
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+.calc-progress-fill {
+  height: 100%;
+  background: #2d6a4f;
+  border-radius: 2px;
+  transition: width .4s ease;
+}
+
+@media (max-width: 480px) {
+  .calc-radio-group { grid-template-columns: 1fr; }
+  .calc-step-pill span { display: none; }
+}

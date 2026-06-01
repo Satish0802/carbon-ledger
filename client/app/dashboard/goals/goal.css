@@ -1,0 +1,145 @@
+.goals-shell {
+  min-height: 100vh;
+  background: var(--s, #f5f6f4);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--t, #111827);
+  padding: 1.5rem;
+}
+@media (prefers-color-scheme: dark) {
+  .goals-shell { --s: #111; --c: #1a1a1a; --b: rgba(255,255,255,0.08); --t: #f3f4f6; --m: #9ca3af; --tr: #2a2a2a; }
+}
+@media (prefers-color-scheme: light) {
+  .goals-shell { --s: #f5f6f4; --c: #fff; --b: rgba(0,0,0,0.08); --t: #111827; --m: #6b7280; --tr: #f3f4f6; }
+}
+
+.goals-inner { max-width: 800px; margin: 0 auto; }
+
+.goals-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px;
+}
+.goals-brand { display: flex; align-items: center; gap: 8px; }
+.goals-leaf {
+  width: 32px; height: 32px; background: #2d6a4f; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+}
+.goals-brand-name { font-size: 16px; font-weight: 600; color: var(--t); }
+.goals-back { font-size: 12px; font-weight: 500; padding: 6px 13px; border-radius: 8px; border: 1px solid var(--b); background: transparent; color: var(--t); cursor: pointer; }
+.goals-back:hover { background: var(--tr); }
+
+.goals-header { margin-bottom: 1.5rem; }
+.goals-title { font-size: 22px; font-weight: 700; color: var(--t); margin-bottom: 4px; }
+.goals-sub   { font-size: 13px; color: var(--m); }
+
+.goals-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin-bottom: 1.5rem;
+}
+.goals-stat {
+  background: var(--c); border: 1px solid var(--b); border-radius: 12px;
+  padding: 1rem; text-align: center;
+}
+.goals-stat-num { font-size: 28px; font-weight: 700; color: var(--t); }
+.goals-stat-lbl { font-size: 11px; color: var(--m); margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
+
+.goals-section-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: .8rem;
+}
+.goals-section-title { font-size: 14px; font-weight: 600; color: var(--t); }
+
+.goals-new-btn {
+  font-size: 12px; font-weight: 600; padding: 7px 16px;
+  border-radius: 8px; border: none; background: #2d6a4f; color: #fff;
+  cursor: pointer; transition: opacity .15s;
+}
+.goals-new-btn:hover { opacity: .88; }
+
+/* ── Goal card ── */
+.goal-card {
+  background: var(--c); border: 1px solid var(--b);
+  border-radius: 12px; padding: 1rem 1.1rem;
+  margin-bottom: 10px;
+}
+.goal-card-top { display: flex; align-items: center; margin-bottom: 6px; gap: 6px; }
+.goal-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  border-radius: 6px; padding: 3px 9px; font-size: 11px; font-weight: 500;
+}
+.goal-badge-achieved { font-size: 11px; font-weight: 600; color: #16a34a; background: #dcfce7; border-radius: 6px; padding: 2px 8px; }
+.goal-badge-overdue  { font-size: 11px; font-weight: 600; color: #dc2626; background: #fee2e2; border-radius: 6px; padding: 2px 8px; }
+.goal-badge-cancelled{ font-size: 11px; color: var(--m); background: var(--tr); border-radius: 6px; padding: 2px 8px; }
+.goal-cancel-btn {
+  margin-left: auto; background: none; border: none; color: var(--m);
+  cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 6px;
+}
+.goal-cancel-btn:hover { background: var(--tr); color: #dc2626; }
+.goal-title { font-size: 14px; font-weight: 600; color: var(--t); margin-bottom: 10px; }
+
+.goal-progress-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.goal-track {
+  flex: 1; height: 8px; background: var(--tr); border-radius: 4px; overflow: hidden;
+}
+.goal-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
+.goal-pct  { font-size: 13px; font-weight: 700; color: var(--t); width: 36px; text-align: right; }
+
+.goal-meta-row {
+  display: flex; gap: 16px; font-size: 11px; color: var(--m); flex-wrap: wrap;
+}
+.goal-expand-btn {
+  font-size: 11px; color: #2d6a4f; background: none; border: none;
+  cursor: pointer; margin-top: 8px; padding: 0; text-decoration: underline;
+}
+.goal-history { margin-top: 8px; border-top: 1px solid var(--b); padding-top: 8px; }
+.goal-history-row {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--m); padding: 3px 0;
+}
+
+/* ── Form ── */
+.goals-form-card {
+  background: var(--c); border: 1px solid var(--b);
+  border-radius: 13px; padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.goals-form-title { font-size: 15px; font-weight: 700; color: var(--t); margin-bottom: 1rem; }
+.gf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.gf-field { margin-bottom: 12px; }
+.gf-label { display: block; font-size: 11px; font-weight: 600; color: var(--t); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px; }
+.gf-input, .gf-select {
+  width: 100%; padding: 9px 11px; border: 1px solid var(--b);
+  border-radius: 8px; font-size: 14px; color: var(--t); background: var(--s);
+  transition: border-color .15s;
+}
+.gf-input:focus, .gf-select:focus { outline: none; border-color: #2d6a4f; box-shadow: 0 0 0 3px rgba(45,106,79,.15); }
+.gf-preview {
+  background: var(--tr); border-radius: 9px; padding: 10px 12px;
+  font-size: 12px; color: var(--m); margin-bottom: 12px; line-height: 1.6;
+}
+.gf-preview strong { color: var(--t); }
+.gf-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.gf-cancel-btn {
+  font-size: 13px; font-weight: 500; padding: 8px 18px;
+  border: 1px solid var(--b); border-radius: 8px;
+  background: transparent; color: var(--m); cursor: pointer;
+}
+.gf-submit-btn {
+  font-size: 13px; font-weight: 600; padding: 8px 20px;
+  border: none; border-radius: 8px; background: #2d6a4f; color: #fff; cursor: pointer;
+}
+.gf-submit-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+.goals-empty {
+  text-align: center; padding: 2rem 1rem;
+  font-size: 13px; color: var(--m); font-style: italic;
+}
+.goals-error {
+  background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
+  font-size: 13px; padding: 10px 14px; border-radius: 8px; margin-bottom: 1rem;
+}
+.goals-divider { height: 1px; background: var(--b); margin: 1.5rem 0; }
+
+@media (max-width: 600px) {
+  .goals-stats { grid-template-columns: repeat(3, 1fr); }
+  .gf-row { grid-template-columns: 1fr; }
+}
