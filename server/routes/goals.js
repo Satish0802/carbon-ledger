@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Goal = require('../models/goal');
+const Goal = require('../models/Goal');
 const auth = require('../middleware/cookies');
 
 // POST /goals — create a new goal
