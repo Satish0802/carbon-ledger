@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const EmissionEntry = require('../models/EmissionEntry');
+const EmissionEntry = require('../models/Emissionentry');
 const UserProfile   = require('../models/UserProfile');
 const authMiddleware = require('../middleware/cookies');
 const admin = require('../middleware/admin'); // Optional: restrict some routes to admins
