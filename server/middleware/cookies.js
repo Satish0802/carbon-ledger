@@ -15,7 +15,7 @@ module.exports = function authMiddleware(req, res, next) {
     req.user = decoded;
     next();
   } catch (err) {
-    res.clearCookie('token', { httpOnly: true, sameSite: 'lax' });
+    res.clearCookie('token', { httpOnly: true, sameSite: 'none', secure: true });
 
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ error: 'Session expired, please log in again' });
