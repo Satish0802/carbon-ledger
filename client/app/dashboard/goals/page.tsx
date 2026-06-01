@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import "./goal.css";
 
@@ -136,9 +136,9 @@ function GoalCard({
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Main Content Component ───────────────────────────────────────────────────
 
-export default function GoalsPage() {
+function GoalsContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
 
@@ -213,7 +213,7 @@ export default function GoalsPage() {
       const res = await fetch(`${API}/goals`, {
   method:      'POST',
   headers:     { 'Content-Type': 'application/json' },
-  credentials: 'include',                                               // ✅
+  credentials: 'include',                                                      // ✅
   body: JSON.stringify({
   userId,
   category: form.category,
@@ -241,7 +241,7 @@ export default function GoalsPage() {
       await fetch(`${API}/goals/${id}`, {
   method:      'PATCH',
   headers:     { 'Content-Type': 'application/json' },
-  credentials: 'include',                                               // ✅
+  credentials: 'include',                                                      // ✅
   body:        JSON.stringify({ status: 'cancelled' }),
 });
       fetchData(userId);
@@ -405,5 +405,15 @@ export default function GoalsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Main Suspense Wrapper ────────────────────────────────────────────────────
+
+export default function GoalsPage() {
+  return (
+    <Suspense fallback={<div className="goals-shell"><div className="goals-inner">Loading goals...</div></div>}>
+      <GoalsContent />
+    </Suspense>
   );
 }
