@@ -15,7 +15,10 @@ const port = process.env.PORT || 8000;
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000', // ✅ Lock down CORS to your frontend
+  origin: [
+    'http://localhost:3000',
+    'https://carbon-ledger-phi.vercel.app'
+  ],
   credentials: true,  // ✅ Required for cookies to be sent cross-origin
 }));
 app.use(express.json());
