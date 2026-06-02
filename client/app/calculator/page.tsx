@@ -25,17 +25,17 @@ interface FormData {
 }
 
 const INITIAL: FormData = {
-  carType: "none",
+  carType: "",
   carKmPerWeek: 0,
   flightsPerYear: 0,
   flightTypeRatio: "mixed",
   publicTransitHoursPerWeek: 0,
   electricityKwhPerMonth: 0,
-  gridRegion: "global_average",
-  heatingType: "none",
-  householdSize: 1,
-  dietType: "medium_meat",
-  foodWasteLevel: "medium",
+  gridRegion: "",
+  heatingType: "",
+  householdSize: 0,
+  dietType: "",
+  foodWasteLevel: "",
   monthlySpendUSD: 0,
   newElectronicsPerYear: 0,
 };
@@ -76,10 +76,11 @@ export default function CalculatorPage() {
   setUserId(JSON.parse(stored)._id);
 }, [router]);
 
-  function set(field: keyof FormData, e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
-    const { type, value } = e.target;
-    setForm((prev) => ({ ...prev, [field]: type === "number" ? Number(value) : value }));
-  }
+function set(field: keyof FormData, e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+  const { type, value, inputMode } = e.target as HTMLInputElement;
+  const isNumeric = type === "number" || (inputMode as string) === "numeric";
+  setForm((prev) => ({ ...prev, [field]: isNumeric ? Number(value) || 0 : value }));
+}
 
   async function handleNext(e: FormEvent) {
     e.preventDefault();
@@ -110,6 +111,7 @@ export default function CalculatorPage() {
     <>
       <Field label="Do you drive a personal car?">
         <select value={form.carType} onChange={(e) => set("carType", e)}>
+          <option value="" disabled>Select an option</option>
           <option value="none">No car</option>
           <option value="petrol">Petrol / Gasoline</option>
           <option value="diesel">Diesel</option>
@@ -120,12 +122,12 @@ export default function CalculatorPage() {
 
       {form.carType !== "none" && (
         <Field label="How far do you drive per week? (km)">
-          <input type="number" min="0" value={form.carKmPerWeek} onChange={(e) => set("carKmPerWeek", e)} />
+          <input type="text" inputMode="numeric" min="0" value={form.carKmPerWeek || ""} placeholder="e.g. 100 km" onChange={(e) => set("carKmPerWeek", e)} />
         </Field>
       )}
 
       <Field label="How many flights do you take per year?">
-        <input type="number" min="0" value={form.flightsPerYear} onChange={(e) => set("flightsPerYear", e)} />
+        <input type="text" inputMode="numeric" min="0" value={form.flightsPerYear || ""} placeholder="e.g. 5" onChange={(e) => set("flightsPerYear", e)} />
       </Field>
 
       {form.flightsPerYear > 0 && (
@@ -139,22 +141,23 @@ export default function CalculatorPage() {
       )}
 
       <Field label="Public transit usage (hours/week)">
-        <input type="number" min="0" value={form.publicTransitHoursPerWeek} onChange={(e) => set("publicTransitHoursPerWeek", e)} />
+        <input type="text" inputMode="numeric" min="0" value={form.publicTransitHoursPerWeek || ""} placeholder="e.g. 10 hours" onChange={(e) => set("publicTransitHoursPerWeek", e)} />
       </Field>
     </>,
 
     // Step 1 — Energy
     <>
       <Field label="How many people live in your home?">
-        <input type="number" min="1" max="20" value={form.householdSize} onChange={(e) => set("householdSize", e)} />
+        <input type="text" inputMode="numeric" pattern="[0-9]*"  value={form.householdSize || ""} placeholder="e.g. 4 people" onChange={(e) => set("householdSize", e)} />
       </Field>
 
       <Field label="Monthly electricity usage (kWh)">
-        <input type="number" min="0" value={form.electricityKwhPerMonth} onChange={(e) => set("electricityKwhPerMonth", e)} placeholder="e.g. 250" />
+        <input type="text" inputMode="numeric" min="0" value={form.electricityKwhPerMonth || ""} placeholder="e.g. 250 kwh" onChange={(e) => set("electricityKwhPerMonth", e)} />
       </Field>
 
       <Field label="Where do you live? (affects grid carbon intensity)">
         <select value={form.gridRegion} onChange={(e) => set("gridRegion", e)}>
+          <option value="" disabled>Select an option</option>
           <option value="global_average">Not sure / Global average</option>
           <option value="europe">Europe</option>
           <option value="north_america">North America</option>
@@ -169,7 +172,8 @@ export default function CalculatorPage() {
       </Field>
 
       <Field label="How do you heat your home?">
-        <select value={form.heatingType} onChange={(e) => set("heatingType", e)}>
+        <select value={form.heatingType || ""} onChange={(e) => set("heatingType", e)}>
+          <option value="" disabled>Select an option</option>
           <option value="none">No heating / warm climate</option>
           <option value="natural_gas">Natural gas boiler</option>
           <option value="electric">Electric heater</option>
@@ -204,7 +208,8 @@ export default function CalculatorPage() {
       </Field>
 
       <Field label="How much food do you typically waste?">
-        <select value={form.foodWasteLevel} onChange={(e) => set("foodWasteLevel", e)}>
+        <select value={form.foodWasteLevel || ""}  onChange={(e) => set("foodWasteLevel", e)}>
+          <option value="" disabled>Select an option</option>
           <option value="low">Low — I rarely throw food away</option>
           <option value="medium">Medium — I waste some food occasionally</option>
           <option value="high">High — I throw away a fair amount</option>
@@ -215,12 +220,12 @@ export default function CalculatorPage() {
     // Step 3 — Shopping
     <>
       <Field label="How much do you spend on general goods per month? (USD)">
-        <input type="number" min="0" value={form.monthlySpendUSD} onChange={(e) => set("monthlySpendUSD", e)} placeholder="e.g. 200" />
+        <input type="text" inputMode="numeric" min="0" value={form.monthlySpendUSD || ""} onChange={(e) => set("monthlySpendUSD", e)} placeholder="e.g. 200" />
         <span className="calc-hint">Clothing, household items, personal goods, etc.</span>
       </Field>
 
       <Field label="How many new electronics do you buy per year?">
-        <input type="number" min="0" value={form.newElectronicsPerYear} onChange={(e) => set("newElectronicsPerYear", e)} placeholder="e.g. phones, laptops, tablets" />
+        <input type="text" inputMode="numeric" min="0" value={form.newElectronicsPerYear || ""} onChange={(e) => set("newElectronicsPerYear", e)} placeholder="e.g. phones, laptops, tablets" />
         <span className="calc-hint">Include phones, laptops, tablets, headphones, etc.</span>
       </Field>
     </>,

@@ -234,3 +234,11 @@
   .calc-radio-group { grid-template-columns: 1fr; }
   .calc-step-pill span { display: none; }
 }
+
+/* Remove number input spinners */
+.calc-field input[type="number"]::-webkit-inner-spin-button,
+.calc-field input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.calc-field input[type="number"] { -moz-appearance: textfield; }
