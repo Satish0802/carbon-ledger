@@ -3,8 +3,7 @@
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import "./goal.css";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { apiFetch, AuthExpiredError } from "../../lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -171,12 +170,12 @@ function GoalsContent() {
     try {
       setLoading(true);
       const [goalRes, latestRes] = await Promise.all([
-  fetch(`${API}/goals/${uid}`,            { credentials: 'include' }), // ✅
-  fetch(`${API}/emissions/${uid}/latest`, { credentials: 'include' }), // ✅
+  apiFetch(`/goals/${uid}`),
+  apiFetch(`/emissions/${uid}/latest`),
 ]);
       if (goalRes.ok)   setGoals(await goalRes.json());
       if (latestRes.ok) setLatest(await latestRes.json());
-    } catch { setError("Failed to load data"); }
+    } catch (e) { if (!(e instanceof AuthExpiredError)) setError("Failed to load data"); }
     finally { setLoading(false); }
   }, []);
 
@@ -210,10 +209,9 @@ function GoalsContent() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`${API}/goals`, {
+      const res = await apiFetch(`/goals`, {
   method:      'POST',
   headers:     { 'Content-Type': 'application/json' },
-  credentials: 'include',                                                      // ✅
   body: JSON.stringify({
   userId,
   category: form.category,
@@ -238,10 +236,9 @@ function GoalsContent() {
   async function handleCancel(id: string) {
     if (!userId || !confirm("Cancel this goal?")) return;
     try {
-      await fetch(`${API}/goals/${id}`, {
+      await apiFetch(`/goals/${id}`, {
   method:      'PATCH',
   headers:     { 'Content-Type': 'application/json' },
-  credentials: 'include',                                                      // ✅
   body:        JSON.stringify({ status: 'cancelled' }),
 });
       fetchData(userId);

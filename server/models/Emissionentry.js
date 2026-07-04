@@ -16,14 +16,14 @@ const emissionEntrySchema = new mongoose.Schema({
   },
   carKmPerWeek: { type: Number, default: 0 },
 
-  flightsPerYear: { type: Number, default: 0 },       // total flights, any length
-  flightTypeRatio: {
-    type: String,
-    enum: ['mostly_short', 'mixed', 'mostly_long'],   // used to weight avg distance
-    default: 'mixed',
-  },
+  shortHaulFlightsPerYear:  { type: Number, default: 0 },
+  mediumHaulFlightsPerYear: { type: Number, default: 0 },
+  longHaulFlightsPerYear:   { type: Number, default: 0 },
 
-  publicTransitHoursPerWeek: { type: Number, default: 0 },
+  busHoursPerWeek:       { type: Number, default: 0 },
+  trainHoursPerWeek:     { type: Number, default: 0 },
+  metroHoursPerWeek:     { type: Number, default: 0 },
+  motorbikeKmPerWeek:    { type: Number, default: 0 },
 
   // ── Home Energy ────────────────────────────────────────────────────────────
   electricityKwhPerMonth: { type: Number, default: 0 },
@@ -45,35 +45,56 @@ const emissionEntrySchema = new mongoose.Schema({
   },
   heatingType: {
     type: String,
-    enum: ['none', 'natural_gas', 'electric', 'heat_pump', 'renewable'],
+    enum: ['none', 'natural_gas', 'electric', 'heat_pump', 'renewable', 'lpg', 'oil', 'wood', 'district', 'solar'],
     default: 'none',
+  },
+  heatingHoursPerDay: { type: Number, default: 0 },
+  cookingFuelType: {
+    type: String,
+    enum: ['electric', 'natural_gas', 'lpg', 'biomass'],
+    default: 'electric',
   },
   householdSize: { type: Number, default: 1 },
 
   // ── Diet ──────────────────────────────────────────────────────────────────
   dietType: {
     type: String,
-    // Annual kg CO2e per person (IPCC AR6 / Poore & Nemecek 2018)
-    // heavy_meat: ~3300 | medium_meat: ~2500 | low_meat: ~1900
-    // pescatarian: ~1500 | vegetarian: ~1200 | vegan: ~800
     enum: ['heavy_meat', 'medium_meat', 'low_meat', 'pescatarian', 'vegetarian', 'vegan'],
     default: 'medium_meat',
   },
   foodWasteLevel: {
     type: String,
-    enum: ['low', 'medium', 'high'], // 0% / +10% / +25% multiplier
+    enum: ['low', 'medium', 'high'],
     default: 'medium',
   },
+  localFoodPct: { type: Number, default: 30 },
 
   // ── Shopping ──────────────────────────────────────────────────────────────
-  monthlySpendUSD: { type: Number, default: 0 },   // general goods + clothing combined
+  newClothingItemsPerYear: { type: Number, default: 0 },
+  clothingType: {
+    type: String,
+    enum: ['fast_fashion', 'mixed', 'sustainable'],
+    default: 'mixed',
+  },
   newElectronicsPerYear: { type: Number, default: 0 },
+  generalGoodsMonthlyUSD: { type: Number, default: 0 },
+  streamingHoursPerDay: { type: Number, default: 0 },
+
+  // ── Water ─────────────────────────────────────────────────────────────────
+  hotWaterSource: {
+    type: String,
+    enum: ['electric', 'natural_gas', 'solar', 'heat_pump'],
+    default: 'electric',
+  },
+  showerMinutesPerDay: { type: Number, default: 0 },
+  bathsPerWeek: { type: Number, default: 0 },
 
   // ── Subtotals (kg CO2e / year, calculated server-side) ────────────────────
   transportKg: { type: Number, default: 0 },
   energyKg:    { type: Number, default: 0 },
   dietKg:      { type: Number, default: 0 },
   shoppingKg:  { type: Number, default: 0 },
+  waterKg:     { type: Number, default: 0 },
 
   // ── Totals ────────────────────────────────────────────────────────────────
   totalKgPerYear:     { type: Number, default: 0 },

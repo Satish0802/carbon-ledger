@@ -67,23 +67,33 @@ exports.logout = (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // ✅ Prevent users from updating other accounts
     if (req.user.userId !== id) {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    const { username, email, password } = req.body;
-    const updates = { username, email };
+    const { username, currentPassword, newPassword } = req.body;
+    const updates = {};
 
-    if (password) {
-      updates.password = await bcrypt.hash(password, SALT_ROUNDS);
+    if (username) updates.username = username;
+
+    if (newPassword) {
+      if (!currentPassword) {
+        return res.status(400).json({ error: 'Current password is required to set a new one' });
+      }
+      const user = await User.findById(id);
+      const match = await bcrypt.compare(currentPassword, user.password);
+      if (!match) {
+        return res.status(400).json({ error: 'Current password is incorrect' });
+      }
+      updates.password = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    }
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ error: 'No changes provided' });
     }
 
     const updatedUser = await User.findByIdAndUpdate(id, updates, { new: true });
-    if (!updatedUser) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+    if (!updatedUser) return res.status(404).json({ error: 'User not found' });
 
     const { password: _, ...userWithoutPassword } = updatedUser._doc;
     res.json({ message: 'User updated successfully', user: userWithoutPassword });

@@ -105,86 +105,24 @@ function calcPercentile(totalKg) {
 // POST /emissions — save a new calculator submission
 router.post('/', authMiddleware, async (req, res) => {
     try {
-        const {
-            userId,
-            // flat transport fields
-            carType, carKmPerWeek, flightsPerYear, flightTypeRatio,
-            publicTransitHoursPerWeek,
-            // flat energy fields
-            electricityKwhPerMonth, gridRegion, heatingType, householdSize,
-            // flat diet fields
-            dietType, foodWasteLevel,
-            // flat shopping fields
-            monthlySpendUSD, newElectronicsPerYear,
-            userRegion,
-        } = req.body;
-
+        const { userId, userRegion, ...input } = req.body;
         if (!userId) return res.status(400).json({ error: 'userId is required' });
 
-        // ── Calculate subtotals from flat fields ──────────────────────────────
+        // ── Use the real helpers — no more duplicate inline math ──────────────
+        const transportKg = calcTransport(input);
+        const energyKg    = calcEnergy(input);
+        const dietKg       = calcDiet(input);
+        const shoppingKg   = calcShopping(input);
+        const waterKg      = calcWater(input);
 
-        const weeksPerYear = 52;
-
-        // Transport
-        const carFactor = { none: 0, petrol: 0.171, diesel: 0.163, hybrid: 0.105, electric: 0.047 };
-        const flightFactor = { mostly_short: 255, mixed: 400, mostly_long: 700 };
-        const transportKg = Math.round(
-            (carFactor[carType] || 0) * (carKmPerWeek || 0) * weeksPerYear +
-            (flightsPerYear || 0) * (flightFactor[flightTypeRatio] || 400) +
-            (publicTransitHoursPerWeek || 0) * 40 * weeksPerYear / 1000
-        );
-
-        // Energy
-        const gridFactor = {
-            global_average: 0.436, europe: 0.258, north_america: 0.369,
-            latin_america: 0.218, china: 0.537, india: 0.708,
-            southeast_asia: 0.529, middle_east: 0.618, africa: 0.548, oceania: 0.521,
-        };
-        const heatingBase = { none: 0, natural_gas: 0.203, electric: 1, heat_pump: 0.4, renewable: 0.05 };
-        const gf = gridFactor[gridRegion] || 0.436;
-        const electricityKg = (electricityKwhPerMonth || 0) * gf * 12;
-        const heatingKg = heatingType === 'electric'
-            ? 2 * 8 * 150 * gf   // avg 2kW, 8hr/day, ~150 heating days
-            : (heatingBase[heatingType] || 0) * 2 * 8 * 150;
-        const energyKg = Math.round((electricityKg + heatingKg) / Math.max(householdSize || 1, 1));
-
-        // Diet
-        const dietBase = { heavy_meat: 3300, medium_meat: 2500, low_meat: 1900, pescatarian: 1500, vegetarian: 1200, vegan: 800 };
-        const wasteMult = { low: 1.0, medium: 1.1, high: 1.25 };
-        const dietKg = Math.round(
-            (dietBase[dietType] || 2500) * (wasteMult[foodWasteLevel] || 1.1)
-        );
-
-        // Shopping
-        const shoppingKg = Math.round(
-            (monthlySpendUSD || 0) * 12 * 0.5 +    // ~0.5 kg CO2e per USD spent
-            (newElectronicsPerYear || 0) * 300       // ~300 kg per device
-        );
-
-        const totalKgPerYear = transportKg + energyKg + dietKg + shoppingKg;
-
-        const calcPercentile = (kg) => {
-            if (kg <= 2000) return Math.round((kg / 2000) * 10);
-            if (kg <= 4800) return Math.round(10 + ((kg - 2000) / 2800) * 40);
-            if (kg <= 8000) return Math.round(50 + ((kg - 4800) / 3200) * 30);
-            return Math.min(Math.round(80 + ((kg - 8000) / 4000) * 20), 99);
-        };
+        const totalKgPerYear = transportKg + energyKg + dietKg + shoppingKg + waterKg;
 
         const entry = new EmissionEntry({
             userId,
-            // store all flat input fields
-            carType, carKmPerWeek, flightsPerYear, flightTypeRatio,
-            publicTransitHoursPerWeek,
-            electricityKwhPerMonth, gridRegion, heatingType, householdSize,
-            dietType, foodWasteLevel,
-            monthlySpendUSD, newElectronicsPerYear,
-            // calculated subtotals
-            transportKg,
-            energyKg,
-            dietKg,
-            shoppingKg,
+            ...input,
+            transportKg, energyKg, dietKg, shoppingKg, waterKg,
             totalKgPerYear,
-            globalAverageKg: 4800,
+            globalAverageKg: BENCHMARKS.globalAverageKg,
             percentileVsGlobal: calcPercentile(totalKgPerYear),
             userRegion: userRegion || 'global',
         });
@@ -201,9 +139,9 @@ router.post('/', authMiddleware, async (req, res) => {
             message: 'Emission entry saved',
             entry: {
                 _id: entry._id,
-                totalKgPerYear, transportKg, energyKg, dietKg, shoppingKg,
+                totalKgPerYear, transportKg, energyKg, dietKg, shoppingKg, waterKg,
                 percentileVsGlobal: entry.percentileVsGlobal,
-                globalAverageKg: 4800,
+                globalAverageKg: BENCHMARKS.globalAverageKg,
                 createdAt: entry.createdAt,
             },
         });

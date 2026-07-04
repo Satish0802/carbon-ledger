@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import "./dashboard.css";
+import { apiFetch, AuthExpiredError } from "../lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,7 @@ interface UserProfile {
   hasCompletedCalculator: boolean;
 }
 
+
 type ActiveTab = "overview" | "history" | "goals";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -66,6 +68,7 @@ const TIPS: Record<string, string> = {
   diet:      "Replacing meat 3× per week can save up to 0.5t CO₂e per year.",
   shopping:  "Buying second-hand and keeping devices longer slashes embodied carbon.",
 };
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -220,11 +223,12 @@ export default function DashboardPage() {
     try {
       setLoading(true);
 
+    
       const [latestRes, histRes, goalRes, profileRes] = await Promise.all([
-  fetch(`${API}/emissions/${userId}/latest`, { credentials: 'include' }), // ✅
-  fetch(`${API}/emissions/${userId}`,        { credentials: 'include' }), // ✅
-  fetch(`${API}/goals/${userId}`,            { credentials: 'include' }), // ✅
-  fetch(`${API}/profile/${userId}`,          { credentials: 'include' }), // ✅
+  apiFetch(`/emissions/${userId}/latest`),
+  apiFetch(`/emissions/${userId}`),
+  apiFetch(`/goals/${userId}`),
+  apiFetch(`/profile/${userId}`),
 ]);
 
       if (latestRes.status === 404) {
@@ -240,11 +244,22 @@ export default function DashboardPage() {
       if (goalRes.ok)    setGoals(await goalRes.json());
       if (profileRes.ok) setProfile(await profileRes.json());
     } catch (e) {
+      if (e instanceof AuthExpiredError) return; // apiFetch is already redirecting to /login
       setError(e instanceof Error ? e.message : "Failed to reach server");
     } finally {
       setLoading(false);
     }
   }, []);
+  async function waitForServer(retries = 10, delayMs = 3000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(`${API}/health`, { credentials: 'include' });
+      if (res.ok) return; // server is up
+    } catch {}
+    await new Promise(r => setTimeout(r, delayMs));
+  }
+  throw new Error("Server took too long to respond");
+}
 
   useEffect(() => { if (user) fetchAll(user._id); }, [user, fetchAll]);
   useEffect(() => {

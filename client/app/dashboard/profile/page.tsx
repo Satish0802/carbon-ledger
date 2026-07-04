@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import "./profile.css";
+import { apiFetch, AuthExpiredError } from "../../lib/api";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -64,6 +65,11 @@ export default function ProfilePage() {
   const [saved, setSaved]       = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [stats, setStats]       = useState<{ entries: number; goals: number } | null>(null);
+  const [accountForm, setAccountForm] = useState({
+    username: "", currentPassword: "", newPassword: "", confirmPassword: "",
+  });
+  const [accountSaving, setAccountSaving] = useState(false);
+  const [accountMsg, setAccountMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem("carbon_user");
@@ -72,11 +78,12 @@ export default function ProfilePage() {
     setUser(u);
     loadProfile(u._id);
     loadStats(u._id);
+    setAccountForm((f) => ({ ...f, username: u.username }));
   }, [router]);
 
   async function loadProfile(uid: string) {
     try {
-      const res = await fetch(`${API}/profile/${uid}`, { credentials: 'include' });
+      const res = await apiFetch(`/profile/${uid}`);
       if (res.ok) {
         const data = await res.json();
         setForm({
@@ -88,16 +95,16 @@ export default function ProfilePage() {
           preferredDistanceUnit: data.preferredDistanceUnit ?? "km",
         });
       }
-    } catch { /* no profile yet — defaults fine */ }
+    } catch (e) { if (!(e instanceof AuthExpiredError)) { /* no profile yet — defaults fine */ } }
     finally { setLoading(false); }
   }
 
   async function loadStats(uid: string) {
     try {
       const [eRes, gRes] = await Promise.all([
-  fetch(`${API}/emissions/${uid}`, { credentials: 'include' }), // ✅
-  fetch(`${API}/goals/${uid}`,     { credentials: 'include' }), // ✅
-]);
+        apiFetch(`/emissions/${uid}`),
+        apiFetch(`/goals/${uid}`),
+      ]);
       const entries = eRes.ok ? (await eRes.json()).length : 0;
       const goals   = gRes.ok ? (await gRes.json()).length : 0;
       setStats({ entries, goals });
@@ -105,41 +112,95 @@ export default function ProfilePage() {
   }
 
   async function handleSave(e: React.FormEvent) {
-  e.preventDefault();
-  if (!user) return;
-  setSaving(true);
-  setError(null);
-  try {
-    const res = await fetch(`${API}/profile/${user._id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(form),
-    });
+    e.preventDefault();
+    if (!user) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/profile/${user._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
 
-    // ADD THESE LINES:
-    console.log("Status:", res.status);
-    const responseBody = await res.json();
-    console.log("Response:", responseBody);
-
-    if (!res.ok) throw new Error(responseBody.message || "Save failed");
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  } catch (err) {
-    setError(err instanceof Error ? err.message : "Error saving profile");
-  } finally {
-    setSaving(false);
+      const responseBody = await res.json();
+      if (!res.ok) throw new Error(responseBody.message || "Save failed");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error saving profile");
+    } finally {
+      setSaving(false);
+    }
   }
-}
+
+  async function handleAccountSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user) return;
+
+    const usernameChanged = accountForm.username.trim() !== user.username;
+    const wantsPasswordChange = accountForm.newPassword.length > 0 || accountForm.confirmPassword.length > 0;
+
+    if (!usernameChanged && !wantsPasswordChange) {
+      setAccountMsg({ type: "err", text: "No changes to save." });
+      return;
+    }
+    if (wantsPasswordChange) {
+      if (accountForm.newPassword.length < 8) {
+        setAccountMsg({ type: "err", text: "New password must be at least 8 characters." });
+        return;
+      }
+      if (accountForm.newPassword !== accountForm.confirmPassword) {
+        setAccountMsg({ type: "err", text: "New passwords don't match." });
+        return;
+      }
+      if (!accountForm.currentPassword) {
+        setAccountMsg({ type: "err", text: "Enter your current password to set a new one." });
+        return;
+      }
+    }
+
+    setAccountSaving(true);
+    setAccountMsg(null);
+    try {
+      const payload: Record<string, string> = {};
+      if (usernameChanged) payload.username = accountForm.username.trim();
+      if (wantsPasswordChange) {
+        payload.currentPassword = accountForm.currentPassword;
+        payload.newPassword = accountForm.newPassword;
+      }
+
+      const res = await apiFetch(`/users/${user._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ||data.message || "Update failed");
+
+      if (usernameChanged) {
+        const updatedUser = { ...user, username: accountForm.username.trim() };
+        setUser(updatedUser);
+        localStorage.setItem("carbon_user", JSON.stringify(updatedUser));
+      }
+      setAccountForm((f) => ({ ...f, currentPassword: "", newPassword: "", confirmPassword: "" }));
+      setAccountMsg({ type: "ok", text: "Account updated." });
+      setTimeout(() => setAccountMsg(null), 3000);
+    } catch (err) {
+      setAccountMsg({ type: "err", text: err instanceof Error ? err.message : "Error updating account." });
+    } finally {
+      setAccountSaving(false);
+    }
+  }
 
   async function handleLogout() {
-  await fetch(`${API}/users/logout`, {
-    method:      'POST',
-    credentials: 'include',
-  });
-  localStorage.removeItem('carbon_user');
-  router.push('/login');
-}
+    await fetch(`${API}/users/logout`, {
+      method:      'POST',
+      credentials: 'include',
+    });
+    localStorage.removeItem('carbon_user');
+    router.push('/login');
+  }
 
   return (
     <div className="profile-shell">
@@ -244,17 +305,94 @@ export default function ProfilePage() {
                   ))}
                 </div>
               </div>
-            </div>
 
-            {/* Actions */}
+              {/* Actions */}
             <div className="pf-actions">
               {saved && <span className="pf-saved">✓ Profile saved</span>}
               <button type="submit" className="pf-save-btn" disabled={saving}>
                 {saving ? "Saving…" : "Save profile"}
               </button>
             </div>
+            </div>
+
+            
           </form>
         )}
+
+        {/* Account settings */}
+        <div className="profile-card">
+          <div className="profile-card-title">🔐 Account settings</div>
+
+          <form onSubmit={handleAccountSave}>
+            <div className="pf-field">
+              <label className="pf-label">Username</label>
+              <input
+                className="pf-input"
+                value={accountForm.username}
+                onChange={(e) => setAccountForm((f) => ({ ...f, username: e.target.value }))}
+                placeholder="Your username"
+                minLength={2}
+                maxLength={30}
+                required
+              />
+            </div>
+
+            <hr style={{ border: "none", borderTop: "1px solid var(--b)", margin: "1rem 0" }} />
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--m)", marginBottom: 10 }}>
+              Change password — leave blank to keep current
+            </div>
+
+            <div className="pf-field">
+              <label className="pf-label">Current password</label>
+              <input
+                className="pf-input"
+                type="password"
+                value={accountForm.currentPassword}
+                onChange={(e) => setAccountForm((f) => ({ ...f, currentPassword: e.target.value }))}
+                placeholder="Required when changing password"
+                autoComplete="current-password"
+              />
+            </div>
+
+            <div className="pf-grid">
+              <div className="pf-field">
+                <label className="pf-label">New password</label>
+                <input
+                  className="pf-input"
+                  type="password"
+                  value={accountForm.newPassword}
+                  onChange={(e) => setAccountForm((f) => ({ ...f, newPassword: e.target.value }))}
+                  placeholder="Min 8 characters"
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="pf-field">
+                <label className="pf-label">Confirm new password</label>
+                <input
+                  className="pf-input"
+                  type="password"
+                  value={accountForm.confirmPassword}
+                  onChange={(e) => setAccountForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+                  placeholder="Repeat new password"
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
+
+            {accountMsg && (
+              <div className={accountMsg.type === "ok" ? "pf-msg-ok" : "pf-msg-err"}>
+                {accountMsg.type === "ok" ? "✓ " : "⚠ "}{accountMsg.text}
+              </div>
+            )}
+
+            <div className="pf-actions">
+              <button type="submit" className="pf-save-btn" disabled={accountSaving}>
+                {accountSaving ? "Saving…" : "Save account changes"}
+              </button>
+            </div>
+          </form>
+        </div>
 
         {/* Danger zone */}
         <div className="profile-danger" style={{ marginTop: "1.5rem" }}>

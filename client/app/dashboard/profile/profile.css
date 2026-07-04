@@ -108,6 +108,12 @@
   font-size: 13px; padding: 10px 14px; border-radius: 8px; margin-bottom: 1rem;
 }
 
+.pf-msg-ok, .pf-msg-err {
+  font-size: 12px; font-weight: 500; padding: 8px 12px; border-radius: 8px; margin-bottom: 10px;
+}
+.pf-msg-ok  { background: #dcfce7; color: #15803d; border: 1px solid #a7f3d0; }
+.pf-msg-err { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+
 /* Danger zone */
 .profile-danger {
   background: var(--c); border: 1px solid #fecaca;
