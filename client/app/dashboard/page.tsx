@@ -23,6 +23,7 @@ interface EmissionEntry {
   energyKg: number;
   dietKg: number;
   shoppingKg: number;
+  waterKg: number;
 }
 
 interface Goal {
@@ -60,6 +61,7 @@ const CAT_META: Record<string, { label: string; color: string; bg: string; icon:
   energy:    { label: "Energy",    color: "#f59e0b", bg: "#fef3c7", icon: "⚡" },
   diet:      { label: "Diet",      color: "#22c55e", bg: "#dcfce7", icon: "🥗" },
   shopping:  { label: "Shopping",  color: "#f43f5e", bg: "#ffe4e6", icon: "🛍️" },
+  water:     { label: "Water",     color: "#06b6d4", bg: "#cffafe", icon: "💧" },
 };
 
 const TIPS: Record<string, string> = {
@@ -67,6 +69,7 @@ const TIPS: Record<string, string> = {
   energy:    "A solar panel or green energy tariff could halve your energy footprint.",
   diet:      "Replacing meat 3× per week can save up to 0.5t CO₂e per year.",
   shopping:  "Buying second-hand and keeping devices longer slashes embodied carbon.",
+  water:     "Shorter showers and a solar or heat-pump water heater cut this footprint fast.",
 };
 
 
@@ -91,6 +94,7 @@ function DonutChart({ entry }: { entry: EmissionEntry }) {
     { key: "energy",    kg: entry.energyKg    ?? 0 },
     { key: "diet",      kg: entry.dietKg      ?? 0 },
     { key: "shopping",  kg: entry.shoppingKg  ?? 0 },
+    { key: "water",     kg: entry.waterKg     ?? 0 },
   ];
   const total = cats.reduce((s, c) => s + c.kg, 0) || 1;
   const circumference = 2 * Math.PI * 38;
@@ -149,10 +153,10 @@ function WelcomeGate({ username, onStart }: { username: string; onStart: () => v
         Welcome to Carbon Ledger, {username}
       </h2>
       <p style={{ fontSize: 14, color: "var(--dash-text-muted)", maxWidth: 380, lineHeight: 1.6, margin: 0 }}>
-        Your dashboard is waiting — but first, complete your carbon footprint assessment. It takes about 3 minutes and covers transport, energy, diet, and shopping.
+        Your dashboard is waiting — but first, complete your carbon footprint assessment. It takes about 3 minutes and covers transport, energy, diet, shopping, and water.
       </p>
-      <div style={{ display: "flex", gap: 20, marginTop: 8 }}>
-        {["🚗 Transport", "⚡ Energy", "🥗 Diet", "🛍 Shopping"].map((s) => (
+      <div style={{ display: "flex", gap: 20, marginTop: 8, flexWrap: "wrap", justifyContent: "center" }}>
+        {["🚗 Transport", "⚡ Energy", "🥗 Diet", "🛍 Shopping", "💧 Water"].map((s) => (
           <span key={s} style={{ fontSize: 12, color: "var(--dash-text-muted)" }}>{s}</span>
         ))}
       </div>
@@ -241,7 +245,7 @@ export default function DashboardPage() {
     try {
       setLoading(true);
 
-    
+
       const [latestRes, histRes, goalRes, profileRes] = await Promise.all([
   apiFetch(`/emissions/${userId}/latest`),
   apiFetch(`/emissions/${userId}`),
@@ -315,6 +319,7 @@ export default function DashboardPage() {
     { key: "energy",    kg: latest.energyKg    ?? 0 },
     { key: "diet",      kg: latest.dietKg      ?? 0 },
     { key: "shopping",  kg: latest.shoppingKg  ?? 0 },
+    { key: "water",     kg: latest.waterKg     ?? 0 },
   ] : [];
 
   const biggestCat = cats.length ? cats.reduce((a, b) => a.kg > b.kg ? a : b) : null;
@@ -385,6 +390,7 @@ export default function DashboardPage() {
                   { cls: "amber", icon: "⚡", bg: "#fef3c7", label: "Energy",      value: fmtT(latest?.energyKg    ?? 0), delta: `${Math.round(((latest?.energyKg    ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
                   { cls: "rose",  icon: "🥗", bg: "#ffe4e6", label: "Diet",        value: fmtT(latest?.dietKg      ?? 0), delta: `${Math.round(((latest?.dietKg      ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
                   { cls: "cyan",  icon: "🛍️", bg: "#fdf4ff", label: "Shopping",   value: fmtT(latest?.shoppingKg  ?? 0), delta: `${Math.round(((latest?.shoppingKg  ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
+                  { cls: "teal",  icon: "💧", bg: "#cffafe", label: "Water",      value: fmtT(latest?.waterKg     ?? 0), delta: `${Math.round(((latest?.waterKg     ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
                 ].map((m) => (
                   <div key={m.label} className={`dash-metric ${m.cls}`}>
                     <div className="dash-m-icon" style={{ background: m.bg }}>{m.icon}</div>
@@ -530,12 +536,13 @@ export default function DashboardPage() {
                             </div>
                           </div>
                           {/* Mini breakdown */}
-                          <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--dash-text-muted)" }}>
+                          <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--dash-text-muted)", flexWrap: "wrap" }}>
                             {[
                               { key: "transport", kg: e.transportKg },
                               { key: "energy",    kg: e.energyKg },
                               { key: "diet",      kg: e.dietKg },
                               { key: "shopping",  kg: e.shoppingKg },
+                              { key: "water",     kg: e.waterKg },
                             ].map((c) => (
                               <span key={c.key} style={{ display: "flex", alignItems: "center", gap: 3 }}>
                                 <span>{CAT_META[c.key].icon}</span>
@@ -546,11 +553,13 @@ export default function DashboardPage() {
                           <div style={{ fontSize: 18, fontWeight: 700, color: "var(--dash-text-primary)" }}>
                             {fmtT(e.totalKgPerYear)}
                           </div>
-                          {d !== null && (
+                          {/* Fixed grid cell — always rendered so alignment holds even for
+                              the oldest entry, which has no prior entry to diff against */}
+                          {d !== null ? (
                             <div style={{ fontSize: 12, fontWeight: 600, color: d < 0 ? "#16a34a" : "#dc2626" }}>
                               {d < 0 ? "↘" : "↗"} {d < 0 ? "−" : "+"}{fmtT(Math.abs(d))}
                             </div>
-                          )}
+                          ) : <div />}
                         </div>
                       );
                     })
