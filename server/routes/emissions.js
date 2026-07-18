@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const EmissionEntry = require('../models/Emissionentry');
 const UserProfile   = require('../models/UserProfile');
+const Goal           = require('../models/Goal');
 const authMiddleware = require('../middleware/cookies');
 const admin = require('../middleware/admin'); // Optional: restrict some routes to admins
 const {
@@ -163,6 +164,32 @@ function calcPercentile(totalKg) {
     return Math.min(Math.round(80 + ((totalKg - 8_000) / 4_000) * 20), 99);
 }
 
+// ─── Goal progress sync ───────────────────────────────────────────────────────
+// Recalculates every active goal's progress against a given category→kg map.
+// Called after any change to a user's emission history (new entry, or an
+// entry being deleted) so `latestPctAchieved` never goes stale.
+async function syncGoalProgress(userId, categoryKg) {
+    const activeGoals = await Goal.find({ userId, status: 'active' });
+    for (const goal of activeGoals) {
+        const currentKg = categoryKg[goal.category];
+        if (currentKg === undefined) continue;
+
+        const denom = goal.baselineKg - goal.targetKg;
+        const pctAchieved = denom !== 0
+            ? Math.round(((goal.baselineKg - currentKg) / denom) * 100)
+            : 0;
+
+        goal.progressHistory.push({ currentKg, pctAchieved });
+        goal.latestKg = currentKg;
+        goal.latestPctAchieved = pctAchieved;
+
+        if (currentKg <= goal.targetKg) goal.status = 'achieved';
+        else if (new Date() > goal.deadline) goal.status = 'missed';
+
+        await goal.save();
+    }
+}
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 // POST /emissions — save a new calculator submission
@@ -199,6 +226,20 @@ router.post('/', authMiddleware, async (req, res) => {
             { hasCompletedCalculator: true, latestEntryId: entry._id, onboardingStep: 'complete' },
             { upsert: true, new: true }
         );
+
+        // ── Sync active goal progress against this new entry ───────────────────
+        // A goal's `latestPctAchieved` is a denormalised snapshot — it only
+        // reflects reality if something recalculates it whenever a new entry
+        // comes in. Previously nothing did, so goals stayed frozen at whatever
+        // value they had when created/last patched directly.
+        await syncGoalProgress(userId, {
+            transport: transportKg,
+            energy: energyKg,
+            diet: dietKg,
+            shopping: shoppingKg,
+            water: waterKg,
+            overall: totalKgPerYear,
+        });
 
         res.status(201).json({
             message: 'Emission entry saved',
@@ -262,20 +303,50 @@ router.get('/:userId', authMiddleware, async (req, res) => {
         const entries = await EmissionEntry
             .find({ userId: req.params.userId })
             .sort({ createdAt: -1 })
-            .select('totalKgPerYear transportKg energyKg dietKg shoppingKg percentileVsGlobal createdAt');
+            .select('totalKgPerYear transportKg energyKg dietKg shoppingKg waterKg percentileVsGlobal createdAt');
         res.json(entries);
     } catch (error) {
         res.status(500).json({ error: 'Error fetching emission entries' });
     }
 });
 
-// DELETE /emissions/:id — delete a specific entry
-router.delete('/:id', authMiddleware, admin, async (req, res) => {
+// DELETE /emissions/:id — delete a specific entry (owner or admin)
+router.delete('/:id', authMiddleware, async (req, res) => {
     try {
-        const deleted = await EmissionEntry.findByIdAndDelete(req.params.id);
-        if (!deleted) return res.status(404).json({ error: 'Entry not found' });
-        res.json({ message: 'Entry deleted' });
+        const entry = await EmissionEntry.findById(req.params.id);
+        if (!entry) return res.status(404).json({ error: 'Entry not found' });
+
+        const isOwner = entry.userId.toString() === req.user.userId;
+        if (!isOwner && !req.user.isAdmin) {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+
+        const userId = entry.userId;
+        await entry.deleteOne();
+
+        // ── Re-sync goal progress to whatever is now the latest entry ──────────
+        // Goal progress is only ever calculated from the most recent submission.
+        // If the entry just deleted WAS the latest one, every active goal's
+        // percentage was derived from data that no longer exists — recalculate
+        // against the new latest entry (or leave untouched if none remain).
+        const newLatest = await EmissionEntry.findOne({ userId }).sort({ createdAt: -1 });
+        if (newLatest) {
+            await syncGoalProgress(userId, {
+                transport: newLatest.transportKg,
+                energy: newLatest.energyKg,
+                diet: newLatest.dietKg,
+                shopping: newLatest.shoppingKg,
+                water: newLatest.waterKg,
+                overall: newLatest.totalKgPerYear,
+            });
+        }
+
+        res.json({
+            message: 'Entry deleted',
+            newLatestEntryId: newLatest ? newLatest._id : null,
+        });
     } catch (error) {
+        console.error('DELETE /emissions/:id error:', error);
         res.status(500).json({ error: 'Error deleting entry' });
     }
 });

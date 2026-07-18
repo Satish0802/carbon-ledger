@@ -280,7 +280,7 @@
    never causes the row to reflow/shift. Each column keeps a fixed slot. */
 .dash-hist-row {
   display: grid;
-  grid-template-columns: 140px 1fr auto 90px;
+  grid-template-columns: 140px 1fr auto 90px 32px;
   align-items: center;
   padding: 10px 0; border-bottom: 1px solid var(--dash-border);
   gap: 10px;

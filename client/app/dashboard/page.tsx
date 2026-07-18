@@ -216,6 +216,69 @@ function NewEntryModal({ onClose, onSubmit, loading }: {
     </div>
   );
 }
+
+// ─── Delete Entry Modal ─────────────────────────────────────────────────────
+
+function DeleteEntryModal({ isLatest, activeGoals, onClose, onConfirm, loading }: {
+  isLatest: boolean;
+  activeGoals: Goal[];
+  onClose: () => void;
+  onConfirm: () => void;
+  loading: boolean;
+}) {
+  const showGoalWarning = isLatest && activeGoals.length > 0;
+
+  return (
+    <div className="dash-modal-backdrop" onClick={onClose}>
+      <div className="dash-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="dash-modal-close" onClick={onClose} aria-label="Close">✕</button>
+
+        <div className="dash-modal-hero">
+          <div className="dash-modal-hero-icon">🗑️</div>
+        </div>
+
+        <div className="dash-modal-body">
+          <h3 className="dash-modal-title">Delete this entry?</h3>
+          <p className="dash-modal-sub">
+            This can't be undone. Your dashboard will fall back to your next most recent entry.
+          </p>
+
+          {showGoalWarning && (
+            <div
+              style={{
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                borderRadius: 8,
+                padding: "10px 14px",
+                fontSize: 12,
+                color: "#92400e",
+                textAlign: "left",
+                marginTop: 4,
+              }}
+            >
+              ⚠️ This is your latest entry. Deleting it will recalculate progress for{" "}
+              <strong>{activeGoals.length}</strong> active goal{activeGoals.length !== 1 ? "s" : ""} against
+              whatever entry becomes the new latest.
+            </div>
+          )}
+
+          <div className="dash-modal-actions">
+            <button className="dash-btn" onClick={onClose} disabled={loading}>Cancel</button>
+            <button
+              className="dash-btn-primary"
+              onClick={onConfirm}
+              disabled={loading}
+              style={{ padding: "10px 22px", background: "#dc2626" }}
+            >
+              {loading ? "Deleting…" : "Delete entry"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -232,6 +295,23 @@ export default function DashboardPage() {
   const [barsIn, setBarsIn]       = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const [showNewEntry, setShowNewEntry] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<EmissionEntry | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDeleteEntry() {
+    if (!deleteTarget || !user) return;
+    setDeleting(true);
+    try {
+      const res = await apiFetch(`/emissions/${deleteTarget._id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete entry");
+      setDeleteTarget(null);
+      await fetchAll(user._id); // refetch — dashboard/goals fall back to the new latest entry automatically
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete entry");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -340,6 +420,15 @@ export default function DashboardPage() {
           loading={false}
         />
       )}
+      {deleteTarget && (
+  <DeleteEntryModal
+    isLatest={history[0]?._id === deleteTarget._id}
+    activeGoals={activeGoals}
+    onClose={() => setDeleteTarget(null)}
+    onConfirm={handleDeleteEntry}
+    loading={deleting}
+  />
+)}
 
       <div className="dash-shell">
         <div className="dash-inner">
@@ -556,10 +645,23 @@ export default function DashboardPage() {
                           {/* Fixed grid cell — always rendered so alignment holds even for
                               the oldest entry, which has no prior entry to diff against */}
                           {d !== null ? (
-                            <div style={{ fontSize: 12, fontWeight: 600, color: d < 0 ? "#16a34a" : "#dc2626" }}>
-                              {d < 0 ? "↘" : "↗"} {d < 0 ? "−" : "+"}{fmtT(Math.abs(d))}
-                            </div>
-                          ) : <div />}
+  <div style={{ fontSize: 12, fontWeight: 600, color: d < 0 ? "#16a34a" : "#dc2626" }}>
+    {d < 0 ? "↘" : "↗"} {d < 0 ? "−" : "+"}{fmtT(Math.abs(d))}
+  </div>
+) : <div />}
+<button
+  onClick={() => setDeleteTarget(e)}
+  title="Delete entry"
+  style={{
+    background: "none", border: "none", cursor: "pointer",
+    color: "var(--dash-text-muted)", fontSize: 13, padding: "4px 6px",
+    borderRadius: 6, transition: "background .15s, color .15s",
+  }}
+  onMouseEnter={(ev) => { ev.currentTarget.style.background = "#fee2e2"; ev.currentTarget.style.color = "#dc2626"; }}
+  onMouseLeave={(ev) => { ev.currentTarget.style.background = "none"; ev.currentTarget.style.color = "var(--dash-text-muted)"; }}
+>
+  🗑
+</button>
                         </div>
                       );
                     })
