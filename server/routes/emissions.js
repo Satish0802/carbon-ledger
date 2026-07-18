@@ -38,6 +38,27 @@ const NUMERIC_CAPS = {
     bathsPerWeek: 50,
 };
 
+// Enum fields default to an empty string on the frontend until the user
+// actually interacts with that select/step. Skipping a step (or the whole
+// step's category not applying to them) should not 400 the whole submission —
+// fall back to each field's schema default instead.
+const ENUM_DEFAULTS = {
+    carType:         { allowed: ['none', 'petrol', 'diesel', 'hybrid', 'electric'], fallback: 'none' },
+    gridRegion:      {
+        allowed: ['global_average', 'europe', 'north_america', 'latin_america', 'china', 'india', 'southeast_asia', 'middle_east', 'africa', 'oceania'],
+        fallback: 'global_average',
+    },
+    heatingType:     {
+        allowed: ['none', 'natural_gas', 'electric', 'heat_pump', 'renewable', 'lpg', 'oil', 'wood', 'district', 'solar'],
+        fallback: 'none',
+    },
+    cookingFuelType: { allowed: ['electric', 'natural_gas', 'lpg', 'biomass'], fallback: 'electric' },
+    dietType:        { allowed: ['heavy_meat', 'medium_meat', 'low_meat', 'pescatarian', 'vegetarian', 'vegan'], fallback: 'medium_meat' },
+    foodWasteLevel:  { allowed: ['low', 'medium', 'high'], fallback: 'medium' },
+    clothingType:    { allowed: ['fast_fashion', 'mixed', 'sustainable'], fallback: 'mixed' },
+    hotWaterSource:  { allowed: ['electric', 'natural_gas', 'solar', 'heat_pump'], fallback: 'electric' },
+};
+
 function sanitizeInput(raw) {
     const out = { ...raw };
     for (const [field, cap] of Object.entries(NUMERIC_CAPS)) {
@@ -46,6 +67,10 @@ function sanitizeInput(raw) {
     }
     // householdSize should never be 0 — floor is 1
     if (out.householdSize < 1) out.householdSize = 1;
+
+    for (const [field, { allowed, fallback }] of Object.entries(ENUM_DEFAULTS)) {
+        if (!allowed.includes(out[field])) out[field] = fallback;
+    }
     return out;
 }
 
