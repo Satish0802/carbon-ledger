@@ -296,8 +296,8 @@
 /* ── Modal ── */
 .dash-modal-backdrop {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.45);
-  backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(6px);
   display: flex; align-items: center; justify-content: center;
   z-index: 100; padding: 1rem;
   animation: fadeIn .15s ease;
@@ -306,28 +306,70 @@
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .dash-modal {
+  position: relative;
   background: var(--dash-card);
   border: 1px solid var(--dash-border);
-  border-radius: 16px;
-  width: 100%; max-width: 400px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  border-radius: 20px;
+  width: 100%; max-width: 420px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.35);
   animation: slideUp .2s ease;
+  overflow: hidden;
 }
 
-@keyframes slideUp { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-.dash-modal-header {
-  display: flex; align-items: center; gap: 12px;
-  padding: 1.1rem 1.25rem 0;
-}
+@keyframes slideUp { from { transform: translateY(14px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
 .dash-modal-close {
-  margin-left: auto; background: none; border: none;
-  font-size: 14px; color: var(--dash-text-muted);
-  cursor: pointer; padding: 4px 6px; border-radius: 6px;
-  transition: background .15s;
+  position: absolute; top: 14px; right: 14px; z-index: 1;
+  background: rgba(0,0,0,0.06); border: none;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 13px; color: var(--dash-text-muted);
+  cursor: pointer; transition: background .15s;
+  display: flex; align-items: center; justify-content: center;
 }
-.dash-modal-close:hover { background: var(--dash-track); }
+.dash-modal-close:hover { background: rgba(0,0,0,0.12); }
+
+.dash-modal-hero {
+  background: linear-gradient(135deg, var(--dash-green) 0%, #1b4332 100%);
+  padding: 2rem 1.5rem 2.2rem;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.dash-modal-hero-icon {
+  width: 56px; height: 56px; border-radius: 16px;
+  background: rgba(255,255,255,0.15);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+}
+
+.dash-modal-body { padding: 1.5rem 1.5rem 1.4rem; }
+
+.dash-modal-title {
+  font-size: 18px; font-weight: 700; color: var(--dash-text-primary);
+  margin: 0 0 6px;
+}
+
+.dash-modal-sub {
+  font-size: 13px; color: var(--dash-text-muted); line-height: 1.5;
+  margin: 0 0 1.1rem;
+}
+
+.dash-modal-steps {
+  display: flex; justify-content: space-between; gap: 6px;
+  background: var(--dash-surface); border-radius: 12px;
+  padding: 12px 8px; margin-bottom: 1.4rem;
+}
+
+.dash-modal-step {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  font-size: 10px; color: var(--dash-text-muted); flex: 1; text-align: center;
+}
+
+.dash-modal-step-icon { font-size: 17px; }
+
+.dash-modal-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+}
 
 /* ── Responsive ── */
 @media(max-width: 768px) {

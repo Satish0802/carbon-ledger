@@ -169,31 +169,49 @@ function NewEntryModal({ onClose, onSubmit, loading }: {
   onSubmit: () => void;
   loading: boolean;
 }) {
+  const steps = [
+    { icon: "🚗", label: "Transport" },
+    { icon: "⚡", label: "Energy" },
+    { icon: "🥗", label: "Diet" },
+    { icon: "🛍️", label: "Shopping" },
+    { icon: "💧", label: "Water" },
+  ];
+
   return (
     <div className="dash-modal-backdrop" onClick={onClose}>
       <div className="dash-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="dash-modal-header">
-          <span style={{ fontSize: 20 }}>📊</span>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--dash-text-primary)" }}>Log a new entry</div>
-            <div style={{ fontSize: 12, color: "var(--dash-text-muted)", marginTop: 2 }}>Update your carbon footprint data</div>
+        <button className="dash-modal-close" onClick={onClose} aria-label="Close">✕</button>
+
+        <div className="dash-modal-hero">
+          <div className="dash-modal-hero-icon">📊</div>
+        </div>
+
+        <div className="dash-modal-body">
+          <h3 className="dash-modal-title">Log a new entry</h3>
+          <p className="dash-modal-sub">
+            Takes about 3 minutes and updates your dashboard, history, and goal progress.
+          </p>
+
+          <div className="dash-modal-steps">
+            {steps.map((s) => (
+              <div key={s.label} className="dash-modal-step">
+                <span className="dash-modal-step-icon">{s.icon}</span>
+                <span>{s.label}</span>
+              </div>
+            ))}
           </div>
-          <button className="dash-modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div style={{ padding: "1rem 1.25rem", fontSize: 13, color: "var(--dash-text-muted)", lineHeight: 1.6 }}>
-          Submit a new assessment to track changes in your footprint over time. Each submission is saved to your history so you can see progress.
-        </div>
-        <div style={{ display: "flex", gap: 8, padding: "0 1.25rem 1.25rem", justifyContent: "flex-end" }}>
-          <button className="dash-btn" onClick={onClose}>Cancel</button>
-          <button className="dash-btn-primary" onClick={onSubmit} disabled={loading} style={{ fontSize: 13, padding: "8px 18px" }}>
-            {loading ? "…" : "Go to calculator →"}
-          </button>
+
+          <div className="dash-modal-actions">
+            <button className="dash-btn" onClick={onClose}>Cancel</button>
+            <button className="dash-btn-primary" onClick={onSubmit} disabled={loading} style={{ padding: "10px 22px" }}>
+              {loading ? "…" : "Go to calculator →"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {

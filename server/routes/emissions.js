@@ -11,6 +11,44 @@ const {
     SHOPPING, WATER, BENCHMARKS,
 } = require('../constants/emissionfactors');
 
+// ─── Input sanitization ───────────────────────────────────────────────────────
+// Never trust client numbers. Anything numeric gets coerced, floored at 0, and
+// capped at a sane ceiling before it ever reaches the calculation helpers.
+// This runs independently of the Mongoose schema bounds — schema bounds catch
+// it again at save time as a second line of defense (defense in depth).
+
+const NUMERIC_CAPS = {
+    carKmPerWeek: 2_000,
+    shortHaulFlightsPerYear: 100,
+    mediumHaulFlightsPerYear: 100,
+    longHaulFlightsPerYear: 100,
+    busHoursPerWeek: 100,
+    trainHoursPerWeek: 100,
+    metroHoursPerWeek: 100,
+    motorbikeKmPerWeek: 2_000,
+    electricityKwhPerMonth: 10_000,
+    heatingHoursPerDay: 24,
+    householdSize: 20,
+    localFoodPct: 100,
+    newClothingItemsPerYear: 500,
+    newElectronicsPerYear: 50,
+    generalGoodsMonthlyUSD: 100_000,
+    streamingHoursPerDay: 24,
+    showerMinutesPerDay: 180,
+    bathsPerWeek: 50,
+};
+
+function sanitizeInput(raw) {
+    const out = { ...raw };
+    for (const [field, cap] of Object.entries(NUMERIC_CAPS)) {
+        const n = Number(out[field]);
+        out[field] = Number.isFinite(n) ? Math.min(Math.max(n, 0), cap) : 0;
+    }
+    // householdSize should never be 0 — floor is 1
+    if (out.householdSize < 1) out.householdSize = 1;
+    return out;
+}
+
 // ─── Calculation helpers ──────────────────────────────────────────────────────
 
 function calcTransport(t) {
@@ -105,10 +143,12 @@ function calcPercentile(totalKg) {
 // POST /emissions — save a new calculator submission
 router.post('/', authMiddleware, async (req, res) => {
     try {
-        const { userId, userRegion, ...input } = req.body;
-        if (!userId) return res.status(400).json({ error: 'userId is required' });
+        const userId = req.user.userId;
+        const { userRegion, ...rawInput } = req.body;
 
-        // ── Use the real helpers — no more duplicate inline math ──────────────
+        // ── Never trust client numbers — sanitize before any calculation ──────
+        const input = sanitizeInput(rawInput);
+
         const transportKg = calcTransport(input);
         const energyKg    = calcEnergy(input);
         const dietKg       = calcDiet(input);
@@ -147,6 +187,10 @@ router.post('/', authMiddleware, async (req, res) => {
         });
     } catch (error) {
         console.error('POST /emissions error:', error);
+        // Mongoose enum/min/max validation errors → 400, not 500
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ error: 'Invalid emission data', details: error.message });
+        }
         res.status(500).json({ error: 'Error saving emission entry' });
     }
 });
