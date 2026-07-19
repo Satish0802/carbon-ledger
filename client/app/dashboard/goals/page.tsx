@@ -1,11 +1,30 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import "./goal.css";
 import { apiFetch, AuthExpiredError } from "../../lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface StoredUser {
+  _id: string;
+  username: string;
+  email: string;
+}
+
+interface EmissionEntry {
+  _id: string;
+  totalKgPerYear: number;
+  percentileVsGlobal: number;
+  globalAverageKg: number;
+  createdAt: string;
+  transportKg: number;
+  energyKg: number;
+  dietKg: number;
+  shoppingKg: number;
+  waterKg: number;
+}
 
 interface Goal {
   _id: string;
@@ -18,399 +37,628 @@ interface Goal {
   latestKg: number | null;
   deadline: string;
   status: string;
-  progressHistory: { date: string; currentKg: number; pctAchieved: number }[];
-  createdAt: string;
 }
 
-interface EmissionEntry {
-  transportKg: number;
-  energyKg: number;
-  dietKg: number;
-  shoppingKg: number;
-  totalKgPerYear: number;
+interface UserProfile {
+  country: string;
+  continent: string;
+  householdSize: number;
+  homeType: string;
+  occupationType: string;
+  onboardingStep: string;
+  hasCompletedCalculator: boolean;
 }
 
-interface NewGoalForm {
-  category: string;
-  title: string;
-  targetReductionPct: number;
-  deadline: string;
-}
+
+type ActiveTab = "overview" | "history" | "goals";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const CAT_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   transport: { label: "Transport", color: "#3b82f6", bg: "#dbeafe", icon: "🚗" },
   energy:    { label: "Energy",    color: "#f59e0b", bg: "#fef3c7", icon: "⚡" },
   diet:      { label: "Diet",      color: "#22c55e", bg: "#dcfce7", icon: "🥗" },
   shopping:  { label: "Shopping",  color: "#f43f5e", bg: "#ffe4e6", icon: "🛍️" },
+  water:     { label: "Water",     color: "#06b6d4", bg: "#cffafe", icon: "💧" },
   overall:   { label: "Overall",   color: "#8b5cf6", bg: "#ede9fe", icon: "🌍" },
 };
 
+const TIPS: Record<string, string> = {
+  transport: "Switch to an EV or public transit to cut your biggest emission source.",
+  energy:    "A solar panel or green energy tariff could halve your energy footprint.",
+  diet:      "Replacing meat 3× per week can save up to 0.5t CO₂e per year.",
+  shopping:  "Buying second-hand and keeping devices longer slashes embodied carbon.",
+  water:     "Shorter showers and a solar or heat-pump water heater cut this footprint fast.",
+};
+
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function initials(name: string) {
+  return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+}
 function fmtT(kg: number) { return (kg / 1000).toFixed(2) + "t"; }
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
-function daysLeft(deadline: string) {
-  const d = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
-  return d;
+function pctVsAvg(total: number, avg: number) {
+  return Math.round(((avg - total) / avg) * 100);
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Donut chart ──────────────────────────────────────────────────────────────
 
-function GoalCard({
-  goal,
-  onCancel,
-}: {
-  goal: Goal;
-  onCancel: (id: string) => void;
-}) {
-  const meta   = CAT_META[goal.category] ?? CAT_META.overall;
-  const pct    = Math.min(goal.latestPctAchieved, 100);
-  const days   = daysLeft(goal.deadline);
-  const overdue = days < 0 && goal.status === "active";
-  const [expanded, setExpanded] = useState(false);
-
+function DonutChart({ entry }: { entry: EmissionEntry }) {
+  const cats = [
+    { key: "transport", kg: entry.transportKg ?? 0 },
+    { key: "energy",    kg: entry.energyKg    ?? 0 },
+    { key: "diet",      kg: entry.dietKg      ?? 0 },
+    { key: "shopping",  kg: entry.shoppingKg  ?? 0 },
+    { key: "water",     kg: entry.waterKg     ?? 0 },
+  ];
+  const total = cats.reduce((s, c) => s + c.kg, 0) || 1;
+  const circumference = 2 * Math.PI * 38;
+  let offset = 0;
   return (
-    <div className="goal-card" style={{ borderLeft: `3px solid ${meta.color}` }}>
-      <div className="goal-card-top">
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-          <span className="goal-pill" style={{ background: meta.bg, color: meta.color }}>
-            {meta.icon} {meta.label}
-          </span>
-          {goal.status === "achieved" && <span className="goal-badge-achieved">✓ Achieved</span>}
-          {overdue && <span className="goal-badge-overdue">Overdue</span>}
-          {goal.status === "cancelled" && <span className="goal-badge-cancelled">Cancelled</span>}
-        </div>
-        {goal.status === "active" && (
-          <button className="goal-cancel-btn" onClick={() => onCancel(goal._id)} title="Cancel goal">✕</button>
-        )}
+    <svg width="120" height="120" viewBox="0 0 100 100" style={{ flexShrink: 0 }}>
+      <circle cx="50" cy="50" r="38" fill="none" stroke="var(--dash-track)" strokeWidth="14" />
+      {cats.map((c) => {
+        const arc = (c.kg / total) * circumference;
+        const el = (
+          <circle key={c.key} cx="50" cy="50" r="38" fill="none"
+            stroke={CAT_META[c.key].color} strokeWidth="14"
+            strokeDasharray={`${arc} ${circumference - arc}`}
+            strokeDashoffset={-offset} transform="rotate(-90 50 50)" />
+        );
+        offset += arc;
+        return el;
+      })}
+      <text x="50" y="45" textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--dash-text-primary)">
+        {(total / 1000).toFixed(1)}t
+      </text>
+      <text x="50" y="58" textAnchor="middle" fontSize="9" fill="var(--dash-text-muted)">CO₂e/yr</text>
+    </svg>
+  );
+}
+
+// ─── Sparkline ────────────────────────────────────────────────────────────────
+
+function Sparkline({ history }: { history: EmissionEntry[] }) {
+  if (history.length < 2) {
+    return <div style={{ height: 64, display: "flex", alignItems: "center", color: "var(--dash-text-muted)", fontSize: 12 }}>Submit more entries to see your trend.</div>;
+  }
+  const vals = [...history].reverse().map((e) => e.totalKgPerYear);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals) || 1;
+  const w = 400, h = 60;
+  const px = (i: number) => (i / (vals.length - 1)) * w;
+  const py = (v: number) => h - ((v - min) / (max - min || 1)) * (h - 8) - 4;
+  const d = vals.map((v, i) => `${i === 0 ? "M" : "L"}${px(i)},${py(v)}`).join(" ");
+  const trend = vals[vals.length - 1] < vals[0];
+  return (
+    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: "block" }}>
+      <path d={d} fill="none" stroke={trend ? "#22c55e" : "#f43f5e"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={px(vals.length - 1)} cy={py(vals[vals.length - 1])} r="4" fill={trend ? "#22c55e" : "#f43f5e"} />
+    </svg>
+  );
+}
+
+// ─── Welcome gate ─────────────────────────────────────────────────────────────
+
+function WelcomeGate({ username, onStart }: { username: string; onStart: () => void }) {
+  return (
+    <div style={{ minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 20, padding: "2rem 1rem" }}>
+      <div style={{ fontSize: 48 }}>🌿</div>
+      <h2 style={{ fontSize: 22, fontWeight: 600, color: "var(--dash-text-primary)", margin: 0 }}>
+        Welcome to Carbon Ledger, {username}
+      </h2>
+      <p style={{ fontSize: 14, color: "var(--dash-text-muted)", maxWidth: 380, lineHeight: 1.6, margin: 0 }}>
+        Your dashboard is waiting — but first, complete your carbon footprint assessment. It takes about 3 minutes and covers transport, energy, diet, shopping, and water.
+      </p>
+      <div style={{ display: "flex", gap: 20, marginTop: 8, flexWrap: "wrap", justifyContent: "center" }}>
+        {["🚗 Transport", "⚡ Energy", "🥗 Diet", "🛍 Shopping", "💧 Water"].map((s) => (
+          <span key={s} style={{ fontSize: 12, color: "var(--dash-text-muted)" }}>{s}</span>
+        ))}
       </div>
-
-      <div className="goal-title">{goal.title}</div>
-
-      <div className="goal-progress-row">
-        <div className="goal-track">
-          <div
-            className="goal-fill"
-            style={{
-              width: `${pct}%`,
-              background: pct >= 100 ? "#22c55e" : meta.color,
-            }}
-          />
-        </div>
-        <span className="goal-pct">{pct}%</span>
-      </div>
-
-      <div className="goal-meta-row">
-        <span>Baseline: {fmtT(goal.baselineKg)}</span>
-        <span>Target: {fmtT(goal.targetKg)} (−{goal.targetReductionPct}%)</span>
-        <span>
-          {goal.status === "active"
-            ? overdue
-              ? `${Math.abs(days)}d overdue`
-              : `${days}d left`
-            : `Deadline: ${fmtDate(goal.deadline)}`}
-        </span>
-      </div>
-
-      {goal.progressHistory.length > 0 && (
-        <button className="goal-expand-btn" onClick={() => setExpanded((e) => !e)}>
-          {expanded ? "Hide" : "Show"} progress history ({goal.progressHistory.length})
-        </button>
-      )}
-
-      {expanded && (
-        <div className="goal-history">
-          {[...goal.progressHistory].reverse().map((p, i) => (
-            <div key={i} className="goal-history-row">
-              <span>{fmtDate(p.date)}</span>
-              <span>{fmtT(p.currentKg)}</span>
-              <span style={{ color: p.pctAchieved >= 100 ? "#16a34a" : "#6b7280" }}>{Math.min(p.pctAchieved, 100).toFixed(0)}%</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <button onClick={onStart} className="dash-btn-primary">Start your assessment →</button>
+      <p style={{ fontSize: 11, color: "var(--dash-text-muted)", margin: 0 }}>Based on IPCC AR6 &amp; IEA 2024 emissions factors</p>
     </div>
   );
 }
 
-// ─── Main Content Component ───────────────────────────────────────────────────
+// ─── New Entry Modal ──────────────────────────────────────────────────────────
 
-function GoalsContent() {
-  const router       = useRouter();
-  const searchParams = useSearchParams();
+function NewEntryModal({ onClose, onSubmit, loading }: {
+  onClose: () => void;
+  onSubmit: () => void;
+  loading: boolean;
+}) {
+  const steps = [
+    { icon: "🚗", label: "Transport" },
+    { icon: "⚡", label: "Energy" },
+    { icon: "🥗", label: "Diet" },
+    { icon: "🛍️", label: "Shopping" },
+    { icon: "💧", label: "Water" },
+  ];
 
-  const [userId, setUserId]   = useState<string | null>(null);
-  const [goals, setGoals]     = useState<Goal[]>([]);
-  const [latest, setLatest]   = useState<EmissionEntry | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving]   = useState(false);
-  const [error, setError]     = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  return (
+    <div className="dash-modal-backdrop" onClick={onClose}>
+      <div className="dash-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="dash-modal-close" onClick={onClose} aria-label="Close">✕</button>
 
-  // Pre-fill from URL params (coming from dashboard "Set goal" buttons)
-  const suggestCat = searchParams.get("suggest") ?? "overall";
-  const [form, setForm] = useState<NewGoalForm>({
-    category: suggestCat,
-    title: "",
-    targetReductionPct: 20,
-    deadline: new Date(Date.now() + 90 * 86400000).toISOString().split("T")[0], // 90 days default
-  });
+        <div className="dash-modal-hero">
+          <div className="dash-modal-hero-icon">📊</div>
+        </div>
 
+        <div className="dash-modal-body">
+          <h3 className="dash-modal-title">Log a new entry</h3>
+          <p className="dash-modal-sub">
+            Takes about 3 minutes and updates your dashboard, history, and goal progress.
+          </p>
+
+          <div className="dash-modal-steps">
+            {steps.map((s) => (
+              <div key={s.label} className="dash-modal-step">
+                <span className="dash-modal-step-icon">{s.icon}</span>
+                <span>{s.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="dash-modal-actions">
+            <button className="dash-btn" onClick={onClose}>Cancel</button>
+            <button className="dash-btn-primary" onClick={onSubmit} disabled={loading} style={{ padding: "10px 22px" }}>
+              {loading ? "…" : "Go to calculator →"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ─── Main dashboard ───────────────────────────────────────────────────────────
+
+export default function DashboardPage() {
+  const router = useRouter();
+
+  const [user, setUser]           = useState<StoredUser | null>(null);
+  const [latest, setLatest]       = useState<EmissionEntry | null>(null);
+  const [history, setHistory]     = useState<EmissionEntry[]>([]);
+  const [goals, setGoals]         = useState<Goal[]>([]);
+  const [profile, setProfile]     = useState<UserProfile | null>(null);
+  const [loading, setLoading]     = useState(true);
+  const [hasEntry, setHasEntry]   = useState(false);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
+  const [barsIn, setBarsIn]       = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [showNewEntry, setShowNewEntry] = useState(false);
+
+  // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const stored = localStorage.getItem("carbon_user");
     if (!stored) { router.push("/login"); return; }
-    const u = JSON.parse(stored);
-    setUserId(u._id);
-    if (searchParams.get("suggest")) setShowForm(true);
-  }, [router, searchParams]);
+    setUser(JSON.parse(stored));
+  }, [router]);
 
-  const fetchData = useCallback(async (uid: string) => {
+  // ── Fetch all data ─────────────────────────────────────────────────────────
+  const fetchAll = useCallback(async (userId: string) => {
     try {
       setLoading(true);
-      const [goalRes, latestRes] = await Promise.all([
-  apiFetch(`/goals/${uid}`),
-  apiFetch(`/emissions/${uid}/latest`),
+
+
+      const [latestRes, histRes, goalRes, profileRes] = await Promise.all([
+  apiFetch(`/emissions/${userId}/latest`),
+  apiFetch(`/emissions/${userId}`),
+  apiFetch(`/goals/${userId}`),
+  apiFetch(`/profile/${userId}`),
 ]);
-      if (goalRes.ok)   setGoals(await goalRes.json());
-      if (latestRes.ok) setLatest(await latestRes.json());
-    } catch (e) { if (!(e instanceof AuthExpiredError)) setError("Failed to load data"); }
-    finally { setLoading(false); }
-  }, []);
 
-  useEffect(() => { if (userId) fetchData(userId); }, [userId, fetchData]);
+      if (latestRes.status === 404) {
+        setHasEntry(false);
+        setLoading(false);
+        return;
+      }
+      if (!latestRes.ok) throw new Error("Server error");
 
-  // Derive baseline from category selection
-  function baselineForCategory(cat: string): number {
-    if (!latest) return 0;
-    switch (cat) {
-      case "transport": return latest.transportKg;
-      case "energy":    return latest.energyKg;
-      case "diet":      return latest.dietKg;
-      case "shopping":  return latest.shoppingKg;
-      case "overall":   return latest.totalKgPerYear;
-      default:          return 0;
-    }
-  }
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!userId) return;
-
-    const baselineKg = baselineForCategory(form.category);
-    if (baselineKg === 0) {
-      setError("No emission data found for that category. Submit a calculator entry first.");
-      return;
-    }
-
-    const targetKg = baselineKg * (1 - form.targetReductionPct / 100);
-
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await apiFetch(`/goals`, {
-  method:      'POST',
-  headers:     { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-  userId,
-  category: form.category,
-  title: form.title || `Cut ${CAT_META[form.category]?.label ?? form.category} by ${form.targetReductionPct}%`,
-  baselineKg,
-  targetReductionPct: form.targetReductionPct,
-  targetKg,
-  deadline: new Date(form.deadline).toISOString(),
-}),
-});
-      if (!res.ok) throw new Error("Failed to create goal");
-      setShowForm(false);
-      setForm({ category: "overall", title: "", targetReductionPct: 20, deadline: new Date(Date.now() + 90 * 86400000).toISOString().split("T")[0] });
-      fetchData(userId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error creating goal");
+      setLatest(await latestRes.json());
+      setHasEntry(true);
+      if (histRes.ok)    setHistory(await histRes.json());
+      if (goalRes.ok)    setGoals(await goalRes.json());
+      if (profileRes.ok) setProfile(await profileRes.json());
+    } catch (e) {
+      if (e instanceof AuthExpiredError) return; // apiFetch is already redirecting to /login
+      setError(e instanceof Error ? e.message : "Failed to reach server");
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
-  }
-
-  async function handleCancel(id: string) {
-    if (!userId || !confirm("Cancel this goal?")) return;
+  }, []);
+  async function waitForServer(retries = 10, delayMs = 3000) {
+  for (let i = 0; i < retries; i++) {
     try {
-      await apiFetch(`/goals/${id}`, {
-  method:      'PATCH',
-  headers:     { 'Content-Type': 'application/json' },
-  body:        JSON.stringify({ status: 'cancelled' }),
-});
-      fetchData(userId);
-    } catch { setError("Failed to cancel goal"); }
+      const res = await fetch(`${API}/health`, { credentials: 'include' });
+      if (res.ok) return; // server is up
+    } catch {}
+    await new Promise(r => setTimeout(r, delayMs));
   }
-
-  const activeGoals   = goals.filter((g) => g.status === "active");
-  const achievedGoals = goals.filter((g) => g.status === "achieved");
-  const missedGoals   = goals.filter((g) => g.status === "missed" || (g.status === "cancelled"));
-  const baseline      = baselineForCategory(form.category);
-  const targetKgPreview = baseline * (1 - form.targetReductionPct / 100);
-
-  return (
-    <div className="goals-shell">
-      <div className="goals-inner">
-
-        {/* Topbar */}
-        <div className="goals-topbar">
-          <div className="goals-brand">
-            <div className="goals-leaf">🌿</div>
-            <span className="goals-brand-name">Carbon Ledger</span>
-          </div>
-          <button className="goals-back" onClick={() => router.push("/dashboard")}>← Dashboard</button>
-        </div>
-
-        <div className="goals-header">
-          <div className="goals-title">🎯 Reduction Goals</div>
-          <div className="goals-sub">Set targets, track progress, build better habits</div>
-        </div>
-
-        {/* Stats */}
-        <div className="goals-stats">
-          <div className="goals-stat">
-            <div className="goals-stat-num">{activeGoals.length}</div>
-            <div className="goals-stat-lbl">Active</div>
-          </div>
-          <div className="goals-stat">
-            <div className="goals-stat-num" style={{ color: "#16a34a" }}>{achievedGoals.length}</div>
-            <div className="goals-stat-lbl">Achieved</div>
-          </div>
-          <div className="goals-stat">
-            <div className="goals-stat-num">{missedGoals.length}</div>
-            <div className="goals-stat-lbl">Missed / Cancelled</div>
-          </div>
-        </div>
-
-        {error && <div className="goals-error">⚠️ {error}</div>}
-
-        {/* New goal form */}
-        {showForm ? (
-          <div className="goals-form-card">
-            <div className="goals-form-title">Create a new goal</div>
-            <form onSubmit={handleCreate}>
-              <div className="gf-row">
-                <div className="gf-field">
-                  <label className="gf-label">Category</label>
-                  <select className="gf-select" value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}>
-                    {Object.entries(CAT_META).map(([k, v]) => (
-                      <option key={k} value={k}>{v.icon} {v.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="gf-field">
-                  <label className="gf-label">Reduction target</label>
-                  <select className="gf-select" value={form.targetReductionPct} onChange={(e) => setForm((p) => ({ ...p, targetReductionPct: Number(e.target.value) }))}>
-                    {[10, 15, 20, 25, 30, 40, 50].map((v) => (
-                      <option key={v} value={v}>{v}% reduction</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="gf-field">
-                <label className="gf-label">Goal title (optional)</label>
-                <input
-                  className="gf-input" type="text" placeholder={`Cut ${CAT_META[form.category]?.label ?? form.category} by ${form.targetReductionPct}%`}
-                  value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-                  maxLength={120}
-                />
-              </div>
-
-              <div className="gf-field">
-                <label className="gf-label">Deadline</label>
-                <input className="gf-input" type="date" value={form.deadline}
-                  min={new Date().toISOString().split("T")[0]}
-                  onChange={(e) => setForm((p) => ({ ...p, deadline: e.target.value }))} required />
-              </div>
-
-              {baseline > 0 && (
-                <div className="gf-preview">
-                  <strong>Preview:</strong> Reduce {CAT_META[form.category]?.label} from{" "}
-                  <strong>{fmtT(baseline)}</strong> → <strong>{fmtT(targetKgPreview)}</strong>{" "}
-                  (saving <strong>{fmtT(baseline - targetKgPreview)}</strong> CO₂e/yr)
-                </div>
-              )}
-
-              {baseline === 0 && (
-                <div className="gf-preview" style={{ color: "#dc2626" }}>
-                  ⚠️ No emission data for this category yet. Complete a calculator entry first.
-                </div>
-              )}
-
-              <div className="gf-actions">
-                <button type="button" className="gf-cancel-btn" onClick={() => setShowForm(false)}>Cancel</button>
-                <button type="submit" className="gf-submit-btn" disabled={saving || baseline === 0}>
-                  {saving ? "Creating…" : "Create goal"}
-                </button>
-              </div>
-            </form>
-          </div>
-        ) : (
-          <div className="goals-section-hd" style={{ marginBottom: "1rem" }}>
-            <span />
-            <button className="goals-new-btn" onClick={() => setShowForm(true)}>
-              + New Goal
-            </button>
-          </div>
-        )}
-
-        {/* Active goals */}
-        {loading ? (
-          <div className="goals-empty">Loading…</div>
-        ) : (
-          <>
-            {activeGoals.length > 0 && (
-              <>
-                <div className="goals-section-hd">
-                  <span className="goals-section-title">Active ({activeGoals.length})</span>
-                </div>
-                {activeGoals.map((g) => <GoalCard key={g._id} goal={g} onCancel={handleCancel} />)}
-              </>
-            )}
-
-            {achievedGoals.length > 0 && (
-              <>
-                <div className="goals-divider" />
-                <div className="goals-section-hd">
-                  <span className="goals-section-title" style={{ color: "#16a34a" }}>✓ Achieved ({achievedGoals.length})</span>
-                </div>
-                {achievedGoals.map((g) => <GoalCard key={g._id} goal={g} onCancel={handleCancel} />)}
-              </>
-            )}
-
-            {missedGoals.length > 0 && (
-              <>
-                <div className="goals-divider" />
-                <div className="goals-section-hd">
-                  <span className="goals-section-title" style={{ color: "#9ca3af" }}>Missed / Cancelled</span>
-                </div>
-                {missedGoals.map((g) => <GoalCard key={g._id} goal={g} onCancel={handleCancel} />)}
-              </>
-            )}
-
-            {goals.length === 0 && !showForm && (
-              <div className="goals-empty">
-                <div style={{ fontSize: 36, marginBottom: 8 }}>🎯</div>
-                No goals yet. Create your first one above!
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
+  throw new Error("Server took too long to respond");
 }
 
-// ─── Main Suspense Wrapper ────────────────────────────────────────────────────
+  useEffect(() => { if (user) fetchAll(user._id); }, [user, fetchAll]);
+  useEffect(() => {
+    if (!loading && hasEntry) {
+      const t = setTimeout(() => setBarsIn(true), 200);
+      return () => clearTimeout(t);
+    }
+  }, [loading, hasEntry]);
 
-export default function GoalsPage() {
+  async function handleLogout() {
+  await fetch(`${API}/users/logout`, {
+    method:      'POST',
+    credentials: 'include',
+  });
+  localStorage.removeItem('carbon_user');
+  router.push('/login');
+}
+  function handleNewEntry() { router.push("/calculator"); }
+
+  // ── Loading ────────────────────────────────────────────────────────────────
+  if (loading) return (
+    <div className="dash-shell">
+      <div className="dash-loading"><div className="dash-spinner" /><span>Loading Carbon Ledger…</span></div>
+    </div>
+  );
+
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const total   = latest?.totalKgPerYear ?? 0;
+  const avg     = latest?.globalAverageKg ?? 4800;
+  const pct     = pctVsAvg(total, avg);
+  const isGreen = pct >= 0;
+
+  const cats = latest ? [
+    { key: "transport", kg: latest.transportKg ?? 0 },
+    { key: "energy",    kg: latest.energyKg    ?? 0 },
+    { key: "diet",      kg: latest.dietKg      ?? 0 },
+    { key: "shopping",  kg: latest.shoppingKg  ?? 0 },
+    { key: "water",     kg: latest.waterKg     ?? 0 },
+  ] : [];
+
+  const biggestCat = cats.length ? cats.reduce((a, b) => a.kg > b.kg ? a : b) : null;
+  const maxKg = Math.max(...cats.map((c) => c.kg), 1);
+
+  const prev  = history[1]?.totalKgPerYear ?? null;
+  const delta = prev ? total - prev : null;
+
+  const activeGoals  = goals.filter((g) => g.status === "active");
+  const achievedGoals = goals.filter((g) => g.status === "achieved");
+
   return (
-    <Suspense fallback={<div className="goals-shell"><div className="goals-inner">Loading goals...</div></div>}>
-      <GoalsContent />
-    </Suspense>
+    <>
+      {showNewEntry && (
+        <NewEntryModal
+          onClose={() => setShowNewEntry(false)}
+          onSubmit={handleNewEntry}
+          loading={false}
+        />
+      )}
+
+      <div className="dash-shell">
+        <div className="dash-inner">
+
+          {/* ── Topbar ── */}
+          <div className="dash-topbar">
+            <div className="dash-brand">
+              <div className="dash-leaf">🌿</div>
+              <div>
+                <h1>Carbon Ledger</h1>
+                <p>Personal emission tracker — {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}</p>
+              </div>
+            </div>
+            <div className="dash-topright">
+              {hasEntry && delta !== null && (
+                <span className={delta < 0 ? "dash-badge-green" : "dash-badge-red"}>
+                  {delta < 0 ? "↘" : "↗"} {delta < 0 ? "−" : "+"}{fmtT(Math.abs(delta))} vs last entry
+                </span>
+              )}
+              {hasEntry && (
+                <button className="dash-btn-accent" onClick={() => setShowNewEntry(true)}>
+                  + New Entry
+                </button>
+              )}
+              {user && (
+                <button className="dash-avatar-wrap" onClick={() => router.push("/dashboard/profile")} title="View profile">
+                  <div className="dash-avatar">{initials(user.username)}</div>
+                  {user.username}
+                </button>
+              )}
+              <button className="dash-btn" onClick={handleLogout}>Sign out</button>
+            </div>
+          </div>
+
+          {/* ── Error ── */}
+          {error && <div className="dash-error">⚠️ {error} — check your Express server is running on port 8000.</div>}
+
+          {/* ── Welcome gate ── */}
+          {!hasEntry ? (
+            <WelcomeGate username={user?.username ?? "there"} onStart={() => router.push("/calculator")} />
+          ) : (
+            <>
+              {/* ── Metric cards ── */}
+              <div className="dash-metric-grid">
+                {[
+                  { cls: "green", icon: "🌍", bg: "#dcfce7", label: "Total CO₂e",  value: fmtT(total), delta: delta !== null ? (delta < 0 ? `↘ −${fmtT(Math.abs(delta))} vs last` : `↗ +${fmtT(delta)} vs last`) : "First entry", deltaType: delta !== null ? (delta < 0 ? "down" : "up") : "flat" },
+                  { cls: "blue",  icon: "🚗", bg: "#dbeafe", label: "Transport",   value: fmtT(latest?.transportKg ?? 0), delta: `${Math.round(((latest?.transportKg ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
+                  { cls: "amber", icon: "⚡", bg: "#fef3c7", label: "Energy",      value: fmtT(latest?.energyKg    ?? 0), delta: `${Math.round(((latest?.energyKg    ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
+                  { cls: "rose",  icon: "🥗", bg: "#ffe4e6", label: "Diet",        value: fmtT(latest?.dietKg      ?? 0), delta: `${Math.round(((latest?.dietKg      ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
+                  { cls: "cyan",  icon: "🛍️", bg: "#fdf4ff", label: "Shopping",   value: fmtT(latest?.shoppingKg  ?? 0), delta: `${Math.round(((latest?.shoppingKg  ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
+                  { cls: "teal",  icon: "💧", bg: "#cffafe", label: "Water",      value: fmtT(latest?.waterKg     ?? 0), delta: `${Math.round(((latest?.waterKg     ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
+                ].map((m) => (
+                  <div key={m.label} className={`dash-metric ${m.cls}`}>
+                    <div className="dash-m-icon" style={{ background: m.bg }}>{m.icon}</div>
+                    <div className="dash-m-label">{m.label}</div>
+                    <div className="dash-m-value">{m.value.replace("t", "")}<span className="dash-m-unit">t</span></div>
+                    <div className={`dash-m-delta ${m.deltaType}`}>{m.delta}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Tabs ── */}
+              <div className="dash-tabs">
+                {(["overview", "history", "goals"] as ActiveTab[]).map((t) => (
+                  <button key={t} className={`dash-tab${activeTab === t ? " active" : ""}`} onClick={() => setActiveTab(t)}>
+                    {t === "goals" && activeGoals.length > 0
+                      ? `Goals (${activeGoals.length})`
+                      : t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {/* ══ OVERVIEW TAB ══ */}
+              {activeTab === "overview" && (
+                <>
+                  <div className="dash-main-row">
+                    {/* Breakdown bars */}
+                    <div className="dash-card">
+                      <div className="dash-card-hd">
+                        <span className="dash-card-title">Breakdown by category</span>
+                        <span className="dash-card-hint">as of {fmtDate(latest?.createdAt ?? "")}</span>
+                      </div>
+                      {cats.map((c) => (
+                        <div key={c.key} className="dash-bar-row">
+                          <span className="dash-bar-label">{CAT_META[c.key].label}</span>
+                          <div className="dash-bar-track">
+                            <div className="dash-bar-fill" style={{ width: barsIn ? `${(c.kg / maxKg) * 100}%` : "0%", background: CAT_META[c.key].color }} />
+                          </div>
+                          <span className="dash-bar-val">{fmtT(c.kg)}</span>
+                        </div>
+                      ))}
+                      {biggestCat && (
+                        <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--dash-border)", fontSize: 12, color: "var(--dash-text-muted)" }}>
+                          <strong style={{ color: "var(--dash-text-primary)" }}>Biggest source:</strong> {CAT_META[biggestCat.key].label} ({fmtT(biggestCat.kg)})
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Donut + vs avg */}
+                    <div className="dash-card">
+                      <div className="dash-card-hd"><span className="dash-card-title">Share by category</span></div>
+                      <div className="dash-donut-wrap">
+                        <DonutChart entry={latest!} />
+                        <div className="dash-legend">
+                          {cats.map((c) => (
+                            <div key={c.key} className="dash-legend-item">
+                              <div className="dash-legend-dot" style={{ background: CAT_META[c.key].color }} />
+                              {CAT_META[c.key].label} — {Math.round((c.kg / total) * 100)}%
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ paddingTop: ".8rem", borderTop: "1px solid var(--dash-border)" }}>
+                        <div className="dash-vs-label">vs. global average ({fmtT(avg)})</div>
+                        <div className="dash-vs-track">
+                          <div className="dash-vs-fill" style={{ width: barsIn ? `${Math.min(Math.abs(pct), 100)}%` : "0%", background: isGreen ? "#22c55e" : "#f43f5e", transition: "width 1.2s ease" }} />
+                        </div>
+                        <div className="dash-vs-text" style={{ color: isGreen ? "#15803d" : "#dc2626" }}>
+                          {isGreen ? `${pct}% below` : `${Math.abs(pct)}% above`} global average
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="dash-bottom-row">
+                    {/* Tips */}
+                    <div className="dash-card">
+                      <div className="dash-card-hd">
+                        <span className="dash-card-title">Personalised tips</span>
+                        <span className="dash-card-hint">based on your data</span>
+                      </div>
+                      {[...cats].sort((a, b) => b.kg - a.kg).slice(0, 3).map((c) => (
+                        <div key={c.key} className="dash-tip">
+                          <span style={{ fontSize: 16 }}>{CAT_META[c.key].icon}</span>
+                          <span><strong>{CAT_META[c.key].label}:</strong> {TIPS[c.key]}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Climate budget */}
+                    <div className="dash-card">
+                      <div className="dash-card-hd"><span className="dash-card-title">Climate budget context</span></div>
+                      {[
+                        { label: "Your footprint",      kg: total, color: isGreen ? "#22c55e" : "#f43f5e" },
+                        { label: "Global average",      kg: avg,   color: "#9ca3af" },
+                        { label: "1.5°C target (2030)", kg: 2300,  color: "#3b82f6" },
+                      ].map((r) => (
+                        <div key={r.label} className="dash-bar-row">
+                          <span className="dash-bar-label" style={{ width: 120 }}>{r.label}</span>
+                          <div className="dash-bar-track">
+                            <div className="dash-bar-fill" style={{ width: barsIn ? `${Math.min((r.kg / 8000) * 100, 100)}%` : "0%", background: r.color }} />
+                          </div>
+                          <span className="dash-bar-val">{fmtT(r.kg)}</span>
+                        </div>
+                      ))}
+                      <div style={{ marginTop: "1rem", fontSize: 11, color: "var(--dash-text-muted)", lineHeight: 1.5 }}>
+                        The IPCC 1.5°C-compatible budget is ~2.3t CO₂e/person/year by 2030.{" "}
+                        {total <= 2300
+                          ? "You are already within budget — great work!"
+                          : `You need to reduce by ${fmtT(total - 2300)} to reach the target.`}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ══ HISTORY TAB ══ */}
+              {activeTab === "history" && (
+                <div className="dash-card">
+                  <div className="dash-card-hd">
+                    <span className="dash-card-title">Emission trend</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span className="dash-card-hint">{history.length} submission{history.length !== 1 ? "s" : ""}</span>
+                      <button className="dash-btn-accent" style={{ fontSize: 11, padding: "4px 12px" }} onClick={() => router.push("/calculator")}>
+                        + New entry
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: "1.2rem" }}>
+                    <Sparkline history={history} />
+                  </div>
+                  {history.length === 0 ? (
+                    <p className="dash-empty">No history yet.</p>
+                  ) : (
+                    history.map((e, i) => {
+                      const prevKg = history[i + 1]?.totalKgPerYear ?? null;
+                      const d = prevKg !== null ? e.totalKgPerYear - prevKg : null;
+                      return (
+                        <div key={e._id} className="dash-hist-row">
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--dash-text-primary)" }}>{fmtDate(e.createdAt)}</div>
+                            <div style={{ fontSize: 11, color: "var(--dash-text-muted)", marginTop: 2 }}>
+                              {i === 0 ? "Latest entry" : `Entry ${history.length - i}`}
+                            </div>
+                          </div>
+                          {/* Mini breakdown */}
+                          <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--dash-text-muted)", flexWrap: "wrap" }}>
+                            {[
+                              { key: "transport", kg: e.transportKg },
+                              { key: "energy",    kg: e.energyKg },
+                              { key: "diet",      kg: e.dietKg },
+                              { key: "shopping",  kg: e.shoppingKg },
+                              { key: "water",     kg: e.waterKg },
+                            ].map((c) => (
+                              <span key={c.key} style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                                <span>{CAT_META[c.key].icon}</span>
+                                <span>{fmtT(c.kg ?? 0)}</span>
+                              </span>
+                            ))}
+                          </div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--dash-text-primary)" }}>
+                            {fmtT(e.totalKgPerYear)}
+                          </div>
+                          {/* Fixed grid cell — always rendered so alignment holds even for
+                              the oldest entry, which has no prior entry to diff against */}
+                          {d !== null ? (
+                            <div style={{ fontSize: 12, fontWeight: 600, color: d < 0 ? "#16a34a" : "#dc2626" }}>
+                              {d < 0 ? "↘" : "↗"} {d < 0 ? "−" : "+"}{fmtT(Math.abs(d))}
+                            </div>
+                          ) : <div />}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {/* ══ GOALS TAB ══ */}
+              {activeTab === "goals" && (
+                <div className="dash-bottom-row" style={{ alignItems: "start" }}>
+                  <div className="dash-card">
+                    <div className="dash-card-hd">
+                      <span className="dash-card-title">Active goals</span>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span className="dash-card-hint">{activeGoals.length} active · {achievedGoals.length} achieved</span>
+                        <button className="dash-btn-accent" style={{ fontSize: 11, padding: "4px 12px" }} onClick={() => router.push("/dashboard/goals")}>
+                          Manage →
+                        </button>
+                      </div>
+                    </div>
+                    {goals.length === 0 ? (
+                      <div style={{ textAlign: "center", padding: "2rem 1rem" }}>
+                        <div style={{ fontSize: 32, marginBottom: 8 }}>🎯</div>
+                        <p style={{ fontSize: 13, color: "var(--dash-text-muted)", marginBottom: 12 }}>
+                          No goals set yet. Create your first reduction goal to start tracking progress.
+                        </p>
+                        <button className="dash-btn-primary" style={{ fontSize: 13, padding: "9px 20px" }} onClick={() => router.push("/dashboard/goals")}>
+                          Create a goal →
+                        </button>
+                      </div>
+                    ) : (
+                      goals.filter((g) => g.status !== "cancelled").map((g) => {
+                        const meta = CAT_META[g.category] ?? CAT_META.overall;
+                        const pctDone = Math.min(Math.max(g.latestPctAchieved, 0), 100);
+                        const overdue = new Date(g.deadline) < new Date() && g.status === "active";
+                        return (
+                          <div key={g._id} className="dash-goal-row">
+                            <div className="dash-goal-label-row">
+                              <span className="dash-goal-name">
+                                <span className="dash-cat-pill" style={{ background: meta.bg, color: meta.color, marginRight: 6 }}>
+                                  {meta.icon} {meta.label}
+                                </span>
+                                {g.title}
+                              </span>
+                              <span className="dash-goal-meta">{pctDone}%</span>
+                            </div>
+                            <div className="dash-goal-track">
+                              <div className="dash-goal-fill" style={{ width: barsIn ? `${pctDone}%` : "0%", background: pctDone >= 100 ? "#22c55e" : meta.color }} />
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                              <span style={{ fontSize: 11, color: "var(--dash-text-muted)" }}>
+                                Target: {fmtT(g.targetKg)} by {fmtDate(g.deadline)}
+                              </span>
+                              {overdue && <span style={{ fontSize: 11, color: "#dc2626" }}>Overdue</span>}
+                              {g.status === "achieved" && <span style={{ fontSize: 11, color: "#16a34a" }}>✓ Achieved</span>}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Suggested goals */}
+                  <div className="dash-card">
+                    <div className="dash-card-hd">
+                      <span className="dash-card-title">Suggested goals</span>
+                      <span className="dash-card-hint">based on your footprint</span>
+                    </div>
+                    {[...cats].sort((a, b) => b.kg - a.kg).slice(0, 3).map((c) => {
+                      const meta = CAT_META[c.key];
+                      return (
+                        <div key={c.key} className="dash-tip" style={{ flexDirection: "column", gap: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ fontSize: 15 }}>{meta.icon}</span>
+                              <strong style={{ fontSize: 12, color: "var(--dash-text-primary)" }}>Cut {meta.label.toLowerCase()} by 20%</strong>
+                            </div>
+                            <button
+                              className="dash-btn"
+                              style={{ fontSize: 11, padding: "3px 10px" }}
+                              onClick={() => router.push(`/dashboard/goals?suggest=${c.key}&kg=${c.kg}`)}
+                            >
+                              Set goal
+                            </button>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--dash-text-muted)" }}>
+                            Would save ~{fmtT(c.kg * 0.2)} — from {fmtT(c.kg)} → {fmtT(c.kg * 0.8)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </>
   );
 }

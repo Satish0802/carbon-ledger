@@ -33,7 +33,7 @@ const NUMERIC_CAPS = {
     localFoodPct: 100,
     newClothingItemsPerYear: 500,
     newElectronicsPerYear: 50,
-    generalGoodsMonthlyUSD: 100_000,
+    generalGoodsMonthlyUSD: 10_000,
     streamingHoursPerDay: 24,
     showerMinutesPerDay: 180,
     bathsPerWeek: 50,
