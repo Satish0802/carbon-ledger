@@ -37,7 +37,7 @@ router.get('/:userId', auth, async (req, res) => {
     }
     try {
         const goals = await Goal
-            .find({ userId: req.params.userId, status: 'active' })
+            .find({ userId: req.params.userId, status: { $ne: 'cancelled' } })
             .sort({ deadline: 1 });
         res.json(goals);
     } catch (error) {

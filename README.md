@@ -145,12 +145,17 @@ Admin accounts can access `GET /users/all` to view all registered users.
 | PUT | /users/:id | User | Update own account |
 | DELETE | /users/:id | User | Delete own account |
 | GET | /users/all | Admin | Get all users |
+| GET | /users/profile | User | Get own user record |
+| POST | /emissions | User | Submit new calculator entry |
 | GET | /emissions/:userId/latest | User | Get latest emission entry |
 | GET | /emissions/:userId | User | Get all entries for user |
-| POST | /emissions | User | Submit new calculator entry |
+| DELETE | /emissions/:id | User | Delete an emission entry |
 | GET | /profile/:uid | User | Get user profile |
 | PUT | /profile/:uid | User | Update user profile |
-| GET | /goals | User | Get user goals |
+| POST | /goals | User | Create a new goal |
+| GET | /goals/:userId | User | Get all goals for user (active + achieved) |
+| PATCH | /goals/:id/progress | User | Update a goal's progress |
+| DELETE | /goals/:id | User | Cancel/delete a goal |
 
 ## License
 
