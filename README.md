@@ -16,6 +16,16 @@ Carbon Ledger helps users understand and reduce their environmental impact by tr
 - 🔐 **Admin Panel** — Admin-only route to view all users (role-based access control)
 - 🌱 **Seed Data** — Pre-built seed script with realistic user profiles for testing
 
+## Screenshots
+
+| Dashboard | Goals |
+|---|---|
+| ![Dashboard overview](docs/screenshots/dashboard-overview.png) | ![Goals tab](docs/screenshots/dashboard-goals.png) |
+
+| Calculator | History |
+|---|---|
+| ![Calculator](docs/screenshots/calculator-begining.png) | ![History trend](docs/screenshots/dashboard-history.png) |
+
 ## Tech Stack
 
 - **Frontend** — Next.js (TypeScript)
