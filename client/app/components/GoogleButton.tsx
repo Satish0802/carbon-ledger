@@ -42,6 +42,7 @@ export default function GoogleButton({ onCredential }: GoogleButtonProps) {
         width: 320,
         text: 'continue_with',
         shape: 'pill',
+        locale: 'en',
       });
     }
 
