@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import GoogleButton from '../components/GoogleButton';
 import '../auth.css';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -15,6 +16,30 @@ export default function RegisterPage() {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
   const [success,  setSuccess]  = useState(false);
+
+  const handleGoogleCredential = async (credential: string) => {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/users/google`, {
+        method:      'POST',
+        headers:     { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body:        JSON.stringify({ credential }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem('carbon_user', JSON.stringify(data.user));
+        router.replace('/dashboard');
+      } else {
+        setError(data.error || 'Google sign-in failed.');
+      }
+    } catch {
+      setError('Cannot reach the server. Is it running on port 8000?');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,6 +121,8 @@ export default function RegisterPage() {
           </button>
         </form>
 
+        <div className="auth-divider" />
+        <GoogleButton onCredential={handleGoogleCredential} />
         <div className="auth-divider" />
         <p className="auth-footer">
           Already have an account?{' '}

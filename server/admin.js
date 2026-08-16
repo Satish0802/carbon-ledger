@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const User = require('./models/user');
 
 async function makeAdmin() {
-  await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/carbondv');
+  await mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/carbon_ledger');
   
   const users = await User.find().select('email role');
 console.log(users);

@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -21,8 +22,9 @@ app.use(cors({
   ],
   credentials: true,  // ✅ Required for cookies to be sent cross-origin
 }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser()); // ✅ ADD THIS — must be before your routes
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ─── DB ───────────────────────────────────────────────────────────────────────
 connectDB();

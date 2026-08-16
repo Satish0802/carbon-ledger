@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import "./dashboard.css";
-import { apiFetch, AuthExpiredError } from "../lib/api";
+import { apiFetch, AuthExpiredError, avatarUrl } from "../lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +47,7 @@ interface UserProfile {
   occupationType: string;
   onboardingStep: string;
   hasCompletedCalculator: boolean;
+  avatar?: string;
 }
 
 
@@ -455,7 +456,13 @@ export default function DashboardPage() {
               )}
               {user && (
                 <button className="dash-avatar-wrap" onClick={() => router.push("/dashboard/profile")} title="View profile">
-                  <div className="dash-avatar">{initials(user.username)}</div>
+                  <div className="dash-avatar" style={{ overflow: "hidden", padding: 0 }}>
+                    {profile?.avatar ? (
+                      <img src={avatarUrl(profile.avatar)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} />
+                    ) : (
+                      initials(user.username)
+                    )}
+                  </div>
                   {user.username}
                 </button>
               )}

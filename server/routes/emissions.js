@@ -223,7 +223,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
         await UserProfile.findOneAndUpdate(
             { userId },
-            { hasCompletedCalculator: true, latestEntryId: entry._id, onboardingStep: 'complete' },
+            { $set: { hasCompletedCalculator: true, latestEntryId: entry._id, onboardingStep: 'complete' } },
             { upsert: true, new: true }
         );
 
@@ -317,7 +317,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
         if (!entry) return res.status(404).json({ error: 'Entry not found' });
 
         const isOwner = entry.userId.toString() === req.user.userId;
-        if (!isOwner && !req.user.isAdmin) {
+        if (!isOwner && req.user.role !== 'admin') {
             return res.status(403).json({ error: 'Unauthorized' });
         }
 

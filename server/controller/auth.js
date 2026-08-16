@@ -1,6 +1,10 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/user');
+const UserProfile = require('../models/UserProfile');
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const SALT_ROUNDS = 10;
 const COOKIE_OPTIONS = {
@@ -34,6 +38,9 @@ exports.login = async (req, res) => {
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' }); 
     }
+    if (!user.password) {
+      return res.status(401).json({ error: 'This account signs in with Google. Use "Sign in with Google" instead.' });
+    }
 
     const isPasswordMatch = await bcrypt.compare(password, user.password);
     if (!isPasswordMatch) {
@@ -63,6 +70,84 @@ exports.logout = (req, res) => {
   res.json({ message: 'Logged out successfully' });
 };
 
+// Google sign-in — verifies the ID token from the "Sign in with Google"
+// button, then finds or creates a matching user and signs the same
+// httpOnly JWT cookie the local login flow uses.
+exports.googleAuth = async (req, res) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) {
+      return res.status(400).json({ error: 'Missing Google credential' });
+    }
+    if (!process.env.GOOGLE_CLIENT_ID) {
+      return res.status(500).json({ error: 'Google sign-in is not configured' });
+    }
+
+    let payload;
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      return res.status(401).json({ error: 'Invalid Google credential' });
+    }
+
+    const { sub: googleId, email, name, picture } = payload;
+    if (!email) {
+      return res.status(400).json({ error: 'Google account has no email' });
+    }
+
+    let user = await User.findOne({ $or: [{ googleId }, { email }] });
+
+    if (!user) {
+      // Derive a unique username from the Google name/email
+      let base = (name || email.split('@')[0]).replace(/\s+/g, '').toLowerCase() || 'user';
+      let username = base;
+      let suffix = 0;
+      while (await User.exists({ username })) {
+        suffix += 1;
+        username = `${base}${suffix}`;
+      }
+
+      user = await User.create({
+        username,
+        email,
+        authProvider: 'google',
+        googleId,
+      });
+    } else if (!user.googleId) {
+      // Existing local account signing in with Google for the first time
+      user.googleId = googleId;
+      await user.save();
+    }
+
+    // Seed the profile avatar from Google's picture the first time only —
+    // $set so an existing profile's other fields are never touched.
+    if (picture) {
+      const existingProfile = await UserProfile.findOne({ userId: user._id });
+      if (!existingProfile) {
+        await UserProfile.create({ userId: user._id, avatar: picture });
+      } else if (!existingProfile.avatar) {
+        await UserProfile.updateOne({ userId: user._id }, { $set: { avatar: picture } });
+      }
+    }
+
+    const token = jwt.sign(
+      { userId: user._id, username: user.username, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d', algorithm: 'HS256' }
+    );
+    res.cookie('token', token, COOKIE_OPTIONS);
+
+    const { password: _, ...userWithoutPassword } = user._doc;
+    res.json({ message: 'Login successful', user: userWithoutPassword });
+  } catch (error) {
+    res.status(500).json({ error: 'Error signing in with Google' });
+  }
+};
+
 // Update user — only allows updating own account
 exports.updateUser = async (req, res) => {
   try {
@@ -81,6 +166,9 @@ exports.updateUser = async (req, res) => {
         return res.status(400).json({ error: 'Current password is required to set a new one' });
       }
       const user = await User.findById(id);
+      if (!user.password) {
+        return res.status(400).json({ error: 'This account signs in with Google and has no password to change' });
+      }
       const match = await bcrypt.compare(currentPassword, user.password);
       if (!match) {
         return res.status(400).json({ error: 'Current password is incorrect' });

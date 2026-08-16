@@ -10,12 +10,14 @@ const {
   updateUser,
   deleteUser,
   getAllUsers,
-  getProfile
+  getProfile,
+  googleAuth
 } = require('../controller/auth'); // ✅ Use controller, no logic in routes
 
 // ─── Public routes (no auth needed) ──────────────────────────────────────────
 router.post('/register', register);
 router.post('/login',    login);
+router.post('/google',   googleAuth);
 
 // ─── Protected routes (must be logged in) ────────────────────────────────────
 router.post('/logout',     authMiddleware, logout);

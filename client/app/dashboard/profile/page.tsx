@@ -3,9 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import "./profile.css";
-import { apiFetch, AuthExpiredError } from "../../lib/api";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { apiFetch, AuthExpiredError, API, avatarUrl } from "../../lib/api";
 
 interface StoredUser {
   _id: string;
@@ -20,6 +18,44 @@ interface ProfileForm {
   homeType: string;
   occupationType: string;
   preferredDistanceUnit: string;
+  avatar: string;
+}
+
+const MAX_AVATAR_SOURCE_BYTES = 8 * 1024 * 1024; // 8MB — before client-side resize
+const AVATAR_DIMENSION = 256; // px, square
+
+// Reads an image file and downsizes it to a small square JPEG Blob before
+// upload — keeps the request small regardless of the original photo size.
+function resizeImageToBlob(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not a valid image'));
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = AVATAR_DIMENSION;
+        canvas.height = AVATAR_DIMENSION;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('Image processing is not supported here')); return; }
+
+        // Cover-crop to a centered square so the avatar isn't stretched
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, AVATAR_DIMENSION, AVATAR_DIMENSION);
+
+        canvas.toBlob(
+          (blob) => blob ? resolve(blob) : reject(new Error('Could not process that image')),
+          'image/jpeg',
+          0.85
+        );
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 const CONTINENTS = [
@@ -59,11 +95,14 @@ export default function ProfilePage() {
     country: "", continent: "prefer_not_to_say",
     householdSize: 1, homeType: "apartment",
     occupationType: "other", preferredDistanceUnit: "km",
+    avatar: "",
   });
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const [saved, setSaved]       = useState(false);
   const [error, setError]       = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError]         = useState<string | null>(null);
   const [stats, setStats]       = useState<{ entries: number; goals: number } | null>(null);
   const [accountForm, setAccountForm] = useState({
     username: "", currentPassword: "", newPassword: "", confirmPassword: "",
@@ -93,6 +132,7 @@ export default function ProfilePage() {
           homeType: data.homeType ?? "apartment",
           occupationType: data.occupationType ?? "other",
           preferredDistanceUnit: data.preferredDistanceUnit ?? "km",
+          avatar: data.avatar ?? "",
         });
       }
     } catch (e) { if (!(e instanceof AuthExpiredError)) { /* no profile yet — defaults fine */ } }
@@ -131,6 +171,47 @@ export default function ProfilePage() {
       setError(err instanceof Error ? err.message : "Error saving profile");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file || !user) return;
+
+    setAvatarError(null);
+
+    if (!file.type.startsWith("image/")) {
+      setAvatarError("Please choose an image file.");
+      return;
+    }
+    if (file.size > MAX_AVATAR_SOURCE_BYTES) {
+      setAvatarError("Image is too large (max 8MB).");
+      return;
+    }
+
+    setAvatarUploading(true);
+    try {
+      const blob = await resizeImageToBlob(file);
+      const formData = new FormData();
+      formData.append("avatar", blob, "avatar.jpg");
+
+      const res = await apiFetch(`/profile/${user._id}/avatar`, {
+        method: "POST",
+        body: formData, // no Content-Type header — the browser sets the multipart boundary
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Could not save your photo");
+      }
+      const updated = await res.json();
+      setForm((p) => ({ ...p, avatar: updated.avatar }));
+    } catch (err) {
+      if (!(err instanceof AuthExpiredError)) {
+        setAvatarError(err instanceof Error ? err.message : "Could not upload photo");
+      }
+    } finally {
+      setAvatarUploading(false);
     }
   }
 
@@ -218,7 +299,36 @@ export default function ProfilePage() {
         {/* Hero card */}
         {user && (
           <div className="profile-hero">
-            <div className="profile-avatar-lg">{initials(user.username)}</div>
+            <label
+              htmlFor="avatar-upload"
+              className="profile-avatar-lg"
+              style={{
+                cursor: "pointer",
+                padding: 0,
+                overflow: "hidden",
+                position: "relative",
+                opacity: avatarUploading ? 0.6 : 1,
+              }}
+              title="Click to change photo"
+            >
+              {form.avatar ? (
+                <img
+                  src={avatarUrl(form.avatar)}
+                  alt={`${user.username}'s avatar`}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }}
+                />
+              ) : (
+                initials(user.username)
+              )}
+              <input
+                id="avatar-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarChange}
+                disabled={avatarUploading}
+                style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }}
+              />
+            </label>
             <div style={{ flex: 1 }}>
               <div className="profile-name">{user.username}</div>
               <div className="profile-email">{user.email}</div>
@@ -228,6 +338,8 @@ export default function ProfilePage() {
                   <div className="profile-stat"><strong>{stats.goals}</strong> goals</div>
                 </div>
               )}
+              {avatarUploading && <div className="profile-email">Uploading photo…</div>}
+              {avatarError && <div className="profile-error" style={{ marginTop: 6 }}>⚠️ {avatarError}</div>}
             </div>
             <button className="profile-logout-btn" onClick={handleLogout}>Sign out</button>
           </div>

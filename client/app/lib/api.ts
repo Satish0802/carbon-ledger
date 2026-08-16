@@ -8,6 +8,17 @@
 
 export const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+/**
+ * Avatars are stored as either a local relative path ("/uploads/avatars/x.jpg",
+ * from our own upload) or a full external URL (a Google account picture).
+ * This resolves either into something an <img src> can use directly.
+ */
+export function avatarUrl(avatar?: string | null): string | undefined {
+  if (!avatar) return undefined;
+  return avatar.startsWith('http') ? avatar : `${API}${avatar}`;
+}
+
+
 export class AuthExpiredError extends Error {
   constructor() {
     super("Session expired, please log in again");

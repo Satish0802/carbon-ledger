@@ -42,6 +42,8 @@ const userProfileSchema = new mongoose.Schema({
         default: 'km',
     },
 
+    avatar: { type: String, default: '' },
+
     // Whether the user has completed at least one calculator submission
     hasCompletedCalculator: { type: Boolean, default: false },
 
