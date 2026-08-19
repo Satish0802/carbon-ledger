@@ -39,24 +39,93 @@ const TRANSPORT = {
         metro:  0.027 * 40,    // 27 g/km × ~40 km/hr = 1.08/hr
     },
 
-    // kg CO2e per km (petrol motorbike/scooter)
-    motorbike: 0.114,
+    // kg CO2e per km, by motorbike/scooter power source
+    motorbike: {
+        petrol:   0.114,   // avg 125cc-150cc ICE scooter/motorbike
+        electric: 0.021,   // e-scooter/e-bike, global avg grid mix
+        none:     0,
+    },
 };
 
 // ─── Energy — Electricity (IEA 2024 regional grid averages, g CO2e/kWh) ──────
 
 const GRID_FACTORS = {
-    // Convert g → kg: divide by 1000
+    // kg CO2e per kWh — approximate, based on public Ember/IEA grid-intensity
+    // data (~2023-24 averages). Real values shift year to year (hydro output
+    // varies with rainfall, coal plants retire, etc.) — these are estimates
+    // for a personal calculator, not a certified emissions factor.
+
+    // ── Regional fallbacks — used when a specific country isn't listed
     global_average: 0.436,
     europe:         0.258,
     north_america:  0.369,
     latin_america:  0.218,
-    china:          0.537,
-    india:          0.708,
     southeast_asia: 0.529,
     middle_east:    0.618,
     africa:         0.548,
     oceania:        0.521,
+
+    // ── Hydro/nuclear/geothermal-dominant grids — very low carbon intensity
+    nepal:        0.040,
+    iceland:      0.005,
+    norway:       0.020,
+    sweden:       0.020,
+    switzerland:  0.030,
+    france:       0.060,
+    brazil:       0.090,
+    ethiopia:     0.010,
+    paraguay:     0.010,
+    new_zealand:  0.110,
+    canada:       0.130,
+    colombia:     0.150,
+    kenya:        0.100,
+    austria:      0.100,
+
+    // ── Mixed grids
+    uk:           0.210,
+    spain:        0.190,
+    peru:         0.200,
+    argentina:    0.300,
+    russia:       0.320,
+    italy:        0.310,
+    chile:        0.350,
+    germany:      0.350,
+    mexico:       0.390,
+    united_states:0.369,
+    uae:          0.450,
+    japan:        0.450,
+    egypt:        0.450,
+    nigeria:      0.400,
+    sri_lanka:    0.400,
+    thailand:     0.400,
+    south_korea:  0.410,
+    turkey:       0.420,
+    pakistan:     0.440,
+    saudi_arabia: 0.600,
+
+    // ── Coal-heavy / high-intensity grids
+    vietnam:      0.490,
+    bangladesh:   0.510,
+    philippines:  0.550,
+    malaysia:     0.550,
+    china:        0.537,
+    australia:    0.540,
+    indonesia:    0.650,
+    poland:       0.650,
+    india:        0.708,
+    south_africa: 0.850,
+};
+
+// Countries grouped for the dropdown UI — keeps the raw factor list above
+// flat/alphabetical-ish while the UI can still show sensible optgroups.
+const GRID_REGION_GROUPS = {
+    'South Asia': ['nepal', 'india', 'pakistan', 'bangladesh', 'sri_lanka'],
+    'East & Southeast Asia': ['china', 'japan', 'south_korea', 'vietnam', 'thailand', 'malaysia', 'philippines', 'indonesia'],
+    'Europe': ['iceland', 'norway', 'sweden', 'switzerland', 'france', 'austria', 'uk', 'spain', 'italy', 'germany', 'poland', 'russia'],
+    'Americas': ['canada', 'united_states', 'mexico', 'brazil', 'colombia', 'peru', 'chile', 'argentina', 'paraguay'],
+    'Middle East & Africa': ['uae', 'saudi_arabia', 'turkey', 'egypt', 'nigeria', 'kenya', 'ethiopia', 'south_africa'],
+    'Oceania': ['australia', 'new_zealand'],
+    'Other / not listed': ['global_average', 'europe', 'north_america', 'latin_america', 'southeast_asia', 'middle_east', 'africa', 'oceania'],
 };
 
 // ─── Energy — Heating (kg CO2e per kWh of heat output) ───────────────────────
@@ -66,14 +135,20 @@ const HEATING = {
     lpg:         0.241,
     oil:         0.265,
     electric:    null,    // ← calculated from grid factor × hours × avg kW
+    heat_pump:   null,    // ← calculated from grid factor × hours × avg kW ÷ COP
     wood:        0.030,   // biomass — low direct CO2 but not zero (IPCC)
     district:    0.150,   // district heating global average
     solar:       0.010,   // embodied + pump electricity
+    renewable:   0.010,   // wind/solar-sourced electric heating — embodied only
     none:        0,
 };
 
-// Avg kW consumed by a typical heater (used when type = electric)
+// Avg kW consumed by a typical heater (used when type = electric/heat_pump)
 const ELECTRIC_HEATER_KW = 2.0;
+
+// Heat pumps move heat instead of generating it — typical coefficient of
+// performance ~3.5x an electric resistive heater (IPCC/IEA default)
+const HEAT_PUMP_COP = 3.5;
 
 // ─── Energy — Cooking (kg CO2e per meal, approx) ─────────────────────────────
 
@@ -104,9 +179,14 @@ const FOOD_WASTE = {
     high:   1.25,   // +25%
 };
 
-// Local food discount: up to 10% reduction if 100% local
-// Applied as: base × (1 - localFoodPct/100 × 0.10)
-const LOCAL_FOOD_MAX_DISCOUNT = 0.10;
+// Local food discount: how much of your diet is sourced nearby vs shipped
+// in. Applied as: base × discount multiplier below — a category is much
+// easier for someone to answer honestly than an exact percentage.
+const LOCAL_FOOD = {
+    mostly_local:    0.93,  // farmers market / local produce most of the time — ~7% below baseline
+    mixed:           1.00,  // baseline — typical supermarket mix
+    mostly_imported: 1.04,  // mostly imported/out-of-season produce — ~4% above baseline
+};
 
 // ─── Shopping & Consumption ───────────────────────────────────────────────────
 
@@ -154,6 +234,16 @@ const WATER = {
 
     // Litres per bath
     bathLitres: 130,
+
+    // kg CO2e per litre for water supply + wastewater treatment (pumping,
+    // purification, sewage processing) — applies regardless of temperature.
+    // Global average, IEA/DEFRA water-sector estimates.
+    supplyTreatmentPerLitre: 0.0004,
+
+    // When a user gives a total bill figure (litres/month) instead of
+    // shower+bath estimates, we don't know how much of it was heated.
+    // Typical household split: showers/baths ≈ 30% of total water use.
+    hotWaterFractionOfTotal: 0.30,
 };
 
 // ─── Global average benchmark ────────────────────────────────────────────────
@@ -170,13 +260,15 @@ const BENCHMARKS = {
 module.exports = {
     TRANSPORT,
     GRID_FACTORS,
+    GRID_REGION_GROUPS,
     HEATING,
     ELECTRIC_HEATER_KW,
+    HEAT_PUMP_COP,
     COOKING,
     COOKING_KWH_PER_MEAL,
     DIET,
     FOOD_WASTE,
-    LOCAL_FOOD_MAX_DISCOUNT,
+    LOCAL_FOOD,
     SHOPPING,
     WATER,
     BENCHMARKS,

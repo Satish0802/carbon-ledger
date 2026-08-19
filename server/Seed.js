@@ -30,9 +30,9 @@ const UserProfile   = require('./models/UserProfile');
 const Goal          = require('./models/Goal');
 
 const {
-    TRANSPORT, GRID_FACTORS, HEATING, ELECTRIC_HEATER_KW,
+    TRANSPORT, GRID_FACTORS, HEATING, ELECTRIC_HEATER_KW, HEAT_PUMP_COP,
     COOKING, COOKING_KWH_PER_MEAL,
-    DIET, FOOD_WASTE, LOCAL_FOOD_MAX_DISCOUNT,
+    DIET, FOOD_WASTE, LOCAL_FOOD,
     SHOPPING, WATER, BENCHMARKS,
 } = require('./constants/emissionfactors');
 
@@ -49,7 +49,8 @@ function calcTransport(t) {
     const busKg   = (t.busHoursPerWeek   || 0) * TRANSPORT.transit.bus   * weeksPerYear;
     const trainKg = (t.trainHoursPerWeek || 0) * TRANSPORT.transit.train * weeksPerYear;
     const metroKg = (t.metroHoursPerWeek || 0) * TRANSPORT.transit.metro * weeksPerYear;
-    const bikeKg  = (t.motorbikeKmPerWeek || 0) * TRANSPORT.motorbike * weeksPerYear;
+    const motorbikeFactor = TRANSPORT.motorbike[t.motorbikeType] ?? TRANSPORT.motorbike.petrol;
+    const bikeKg  = (t.motorbikeKmPerWeek || 0) * motorbikeFactor * weeksPerYear;
     return Math.round(carKg + flightKg + busKg + trainKg + metroKg + bikeKg);
 }
 
@@ -57,11 +58,17 @@ function calcEnergy(e) {
     const gridFactor = GRID_FACTORS[e.gridRegion] || GRID_FACTORS.global_average;
     const monthsPerYear = 12;
 
-    const electricityKg = (e.electricityKwhPerMonth || 0) * gridFactor * monthsPerYear;
+    const RENEWABLE_FRACTION = { no: 0, half: 0.5, yes: 1 };
+    const renewableFraction = RENEWABLE_FRACTION[e.renewableElectricity] ?? 0;
+    const effectiveGridFactor = gridFactor * (1 - renewableFraction);
+
+    const electricityKg = (e.electricityKwhPerMonth || 0) * effectiveGridFactor * monthsPerYear;
 
     let heatingKg = 0;
     if (e.heatingType === 'electric') {
-        heatingKg = ELECTRIC_HEATER_KW * (e.heatingHoursPerDay || 0) * 365 * gridFactor;
+        heatingKg = ELECTRIC_HEATER_KW * (e.heatingHoursPerDay || 0) * 365 * effectiveGridFactor;
+    } else if (e.heatingType === 'heat_pump') {
+        heatingKg = (ELECTRIC_HEATER_KW * (e.heatingHoursPerDay || 0) * 365 * effectiveGridFactor) / HEAT_PUMP_COP;
     } else if (HEATING[e.heatingType]) {
         heatingKg = ELECTRIC_HEATER_KW * (e.heatingHoursPerDay || 0) * 365 * HEATING[e.heatingType];
     }
@@ -69,7 +76,7 @@ function calcEnergy(e) {
     const mealsPerYear = 2 * 365;
     let cookingKg = 0;
     if (e.cookingFuelType === 'electric') {
-        cookingKg = mealsPerYear * COOKING_KWH_PER_MEAL * gridFactor;
+        cookingKg = mealsPerYear * COOKING_KWH_PER_MEAL * effectiveGridFactor;
     } else if (COOKING[e.cookingFuelType]) {
         cookingKg = mealsPerYear * COOKING[e.cookingFuelType];
     }
@@ -81,9 +88,8 @@ function calcEnergy(e) {
 function calcDiet(d) {
     const base          = DIET[d.dietType] || DIET.medium_meat;
     const wasteMult      = FOOD_WASTE[d.foodWasteLevel] || FOOD_WASTE.medium;
-    const localPct       = Math.min(Math.max(d.localFoodPct || 30, 0), 100);
-    const localDiscount  = 1 - (localPct / 100) * LOCAL_FOOD_MAX_DISCOUNT;
-    return Math.round(base * wasteMult * localDiscount);
+    const localMult       = LOCAL_FOOD[d.localFoodLevel] || LOCAL_FOOD.mixed;
+    return Math.round(base * wasteMult * localMult);
 }
 
 function calcShopping(s) {
@@ -96,9 +102,21 @@ function calcShopping(s) {
 
 function calcWater(w) {
     const factor = WATER.hotWater[w.hotWaterSource] || WATER.hotWater.electric;
+
+    if (w.waterLitresPerMonth > 0) {
+        const litresPerYear = w.waterLitresPerMonth * 12;
+        const hotLitresPerYear = litresPerYear * WATER.hotWaterFractionOfTotal;
+        const heatingKg = hotLitresPerYear * factor;
+        const supplyKg  = litresPerYear * WATER.supplyTreatmentPerLitre;
+        return Math.round(heatingKg + supplyKg);
+    }
+
     const showerLitresPerYear = (w.showerMinutesPerDay || 0) * WATER.showerLitresPerMinute * 365;
     const bathLitresPerYear   = (w.bathsPerWeek        || 0) * WATER.bathLitres * 52;
-    return Math.round((showerLitresPerYear + bathLitresPerYear) * factor);
+    const litresPerYear = showerLitresPerYear + bathLitresPerYear;
+    const heatingKg = litresPerYear * factor;
+    const supplyKg  = litresPerYear * WATER.supplyTreatmentPerLitre;
+    return Math.round(heatingKg + supplyKg);
 }
 
 function calcPercentile(totalKg) {
@@ -177,7 +195,7 @@ const USERS = [
               busHoursPerWeek: 3, trainHoursPerWeek: 1, metroHoursPerWeek: 1, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 180, gridRegion: 'india',
               heatingType: 'none', heatingHoursPerDay: 0, cookingFuelType: 'lpg',
-              householdSize: 3, dietType: 'medium_meat', foodWasteLevel: 'high', localFoodPct: 20,
+              householdSize: 3, dietType: 'medium_meat', foodWasteLevel: 'high', localFoodLevel: 'mostly_imported',
               newClothingItemsPerYear: 12, clothingType: 'mixed', newElectronicsPerYear: 1,
               generalGoodsMonthlyUSD: 150, streamingHoursPerDay: 2,
               hotWaterSource: 'electric', showerMinutesPerDay: 8, bathsPerWeek: 0,
@@ -188,7 +206,7 @@ const USERS = [
               busHoursPerWeek: 4, trainHoursPerWeek: 1, metroHoursPerWeek: 1, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 170, gridRegion: 'india',
               heatingType: 'none', heatingHoursPerDay: 0, cookingFuelType: 'lpg',
-              householdSize: 3, dietType: 'low_meat', foodWasteLevel: 'medium', localFoodPct: 30,
+              householdSize: 3, dietType: 'low_meat', foodWasteLevel: 'medium', localFoodLevel: 'mixed',
               newClothingItemsPerYear: 10, clothingType: 'mixed', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 140, streamingHoursPerDay: 2,
               hotWaterSource: 'electric', showerMinutesPerDay: 8, bathsPerWeek: 0,
@@ -199,7 +217,7 @@ const USERS = [
               busHoursPerWeek: 5, trainHoursPerWeek: 1, metroHoursPerWeek: 1, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 165, gridRegion: 'india',
               heatingType: 'none', heatingHoursPerDay: 0, cookingFuelType: 'lpg',
-              householdSize: 3, dietType: 'pescatarian', foodWasteLevel: 'medium', localFoodPct: 35,
+              householdSize: 3, dietType: 'pescatarian', foodWasteLevel: 'medium', localFoodLevel: 'mixed',
               newClothingItemsPerYear: 8, clothingType: 'mixed', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 130, streamingHoursPerDay: 2,
               hotWaterSource: 'electric', showerMinutesPerDay: 8, bathsPerWeek: 0,
@@ -210,7 +228,7 @@ const USERS = [
               busHoursPerWeek: 5, trainHoursPerWeek: 2, metroHoursPerWeek: 1, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 155, gridRegion: 'india',
               heatingType: 'none', heatingHoursPerDay: 0, cookingFuelType: 'electric',
-              householdSize: 3, dietType: 'vegetarian', foodWasteLevel: 'low', localFoodPct: 40,
+              householdSize: 3, dietType: 'vegetarian', foodWasteLevel: 'low', localFoodLevel: 'mixed',
               newClothingItemsPerYear: 6, clothingType: 'sustainable', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 120, streamingHoursPerDay: 1,
               hotWaterSource: 'electric', showerMinutesPerDay: 7, bathsPerWeek: 0,
@@ -221,7 +239,7 @@ const USERS = [
               busHoursPerWeek: 5, trainHoursPerWeek: 2, metroHoursPerWeek: 1, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 150, gridRegion: 'india',
               heatingType: 'none', heatingHoursPerDay: 0, cookingFuelType: 'electric',
-              householdSize: 3, dietType: 'vegetarian', foodWasteLevel: 'low', localFoodPct: 45,
+              householdSize: 3, dietType: 'vegetarian', foodWasteLevel: 'low', localFoodLevel: 'mixed',
               newClothingItemsPerYear: 5, clothingType: 'sustainable', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 110, streamingHoursPerDay: 1,
               hotWaterSource: 'electric', showerMinutesPerDay: 7, bathsPerWeek: 0,
@@ -232,7 +250,7 @@ const USERS = [
               busHoursPerWeek: 6, trainHoursPerWeek: 2, metroHoursPerWeek: 1, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 145, gridRegion: 'india',
               heatingType: 'none', heatingHoursPerDay: 0, cookingFuelType: 'electric',
-              householdSize: 3, dietType: 'vegetarian', foodWasteLevel: 'low', localFoodPct: 50,
+              householdSize: 3, dietType: 'vegetarian', foodWasteLevel: 'low', localFoodLevel: 'mostly_local',
               newClothingItemsPerYear: 4, clothingType: 'sustainable', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 100, streamingHoursPerDay: 1,
               hotWaterSource: 'electric', showerMinutesPerDay: 7, bathsPerWeek: 0,
@@ -268,7 +286,7 @@ const USERS = [
               busHoursPerWeek: 0, trainHoursPerWeek: 0, metroHoursPerWeek: 0, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 900, gridRegion: 'north_america',
               heatingType: 'natural_gas', heatingHoursPerDay: 6, cookingFuelType: 'natural_gas',
-              householdSize: 2, dietType: 'heavy_meat', foodWasteLevel: 'high', localFoodPct: 10,
+              householdSize: 2, dietType: 'heavy_meat', foodWasteLevel: 'high', localFoodLevel: 'mostly_imported',
               newClothingItemsPerYear: 15, clothingType: 'fast_fashion', newElectronicsPerYear: 3,
               generalGoodsMonthlyUSD: 800, streamingHoursPerDay: 4,
               hotWaterSource: 'natural_gas', showerMinutesPerDay: 12, bathsPerWeek: 2,
@@ -279,7 +297,7 @@ const USERS = [
               busHoursPerWeek: 1, trainHoursPerWeek: 0, metroHoursPerWeek: 0, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 850, gridRegion: 'north_america',
               heatingType: 'natural_gas', heatingHoursPerDay: 6, cookingFuelType: 'natural_gas',
-              householdSize: 2, dietType: 'heavy_meat', foodWasteLevel: 'high', localFoodPct: 10,
+              householdSize: 2, dietType: 'heavy_meat', foodWasteLevel: 'high', localFoodLevel: 'mostly_imported',
               newClothingItemsPerYear: 12, clothingType: 'fast_fashion', newElectronicsPerYear: 2,
               generalGoodsMonthlyUSD: 750, streamingHoursPerDay: 4,
               hotWaterSource: 'natural_gas', showerMinutesPerDay: 12, bathsPerWeek: 2,
@@ -290,7 +308,7 @@ const USERS = [
               busHoursPerWeek: 1, trainHoursPerWeek: 0, metroHoursPerWeek: 0, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 820, gridRegion: 'north_america',
               heatingType: 'natural_gas', heatingHoursPerDay: 6, cookingFuelType: 'natural_gas',
-              householdSize: 2, dietType: 'heavy_meat', foodWasteLevel: 'medium', localFoodPct: 15,
+              householdSize: 2, dietType: 'heavy_meat', foodWasteLevel: 'medium', localFoodLevel: 'mostly_imported',
               newClothingItemsPerYear: 10, clothingType: 'fast_fashion', newElectronicsPerYear: 1,
               generalGoodsMonthlyUSD: 700, streamingHoursPerDay: 4,
               hotWaterSource: 'natural_gas', showerMinutesPerDay: 11, bathsPerWeek: 1,
@@ -301,7 +319,7 @@ const USERS = [
               busHoursPerWeek: 2, trainHoursPerWeek: 0, metroHoursPerWeek: 0, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 800, gridRegion: 'north_america',
               heatingType: 'natural_gas', heatingHoursPerDay: 5, cookingFuelType: 'natural_gas',
-              householdSize: 2, dietType: 'medium_meat', foodWasteLevel: 'medium', localFoodPct: 20,
+              householdSize: 2, dietType: 'medium_meat', foodWasteLevel: 'medium', localFoodLevel: 'mostly_imported',
               newClothingItemsPerYear: 8, clothingType: 'mixed', newElectronicsPerYear: 1,
               generalGoodsMonthlyUSD: 680, streamingHoursPerDay: 3,
               hotWaterSource: 'natural_gas', showerMinutesPerDay: 11, bathsPerWeek: 1,
@@ -312,7 +330,7 @@ const USERS = [
               busHoursPerWeek: 2, trainHoursPerWeek: 0, metroHoursPerWeek: 0, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 780, gridRegion: 'north_america',
               heatingType: 'natural_gas', heatingHoursPerDay: 5, cookingFuelType: 'natural_gas',
-              householdSize: 2, dietType: 'medium_meat', foodWasteLevel: 'medium', localFoodPct: 20,
+              householdSize: 2, dietType: 'medium_meat', foodWasteLevel: 'medium', localFoodLevel: 'mostly_imported',
               newClothingItemsPerYear: 6, clothingType: 'mixed', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 650, streamingHoursPerDay: 3,
               hotWaterSource: 'natural_gas', showerMinutesPerDay: 10, bathsPerWeek: 1,
@@ -323,7 +341,7 @@ const USERS = [
               busHoursPerWeek: 3, trainHoursPerWeek: 0, metroHoursPerWeek: 0, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 760, gridRegion: 'north_america',
               heatingType: 'heat_pump', heatingHoursPerDay: 5, cookingFuelType: 'electric',
-              householdSize: 2, dietType: 'low_meat', foodWasteLevel: 'medium', localFoodPct: 25,
+              householdSize: 2, dietType: 'low_meat', foodWasteLevel: 'medium', localFoodLevel: 'mostly_imported',
               newClothingItemsPerYear: 5, clothingType: 'mixed', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 600, streamingHoursPerDay: 3,
               hotWaterSource: 'heat_pump', showerMinutesPerDay: 10, bathsPerWeek: 1,
@@ -361,7 +379,7 @@ const USERS = [
               busHoursPerWeek: 5, trainHoursPerWeek: 5, metroHoursPerWeek: 2, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 120, gridRegion: 'europe',
               heatingType: 'solar', heatingHoursPerDay: 3, cookingFuelType: 'electric',
-              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodPct: 60,
+              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodLevel: 'mostly_local',
               newClothingItemsPerYear: 3, clothingType: 'sustainable', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 200, streamingHoursPerDay: 1,
               hotWaterSource: 'solar', showerMinutesPerDay: 6, bathsPerWeek: 0,
@@ -372,7 +390,7 @@ const USERS = [
               busHoursPerWeek: 5, trainHoursPerWeek: 5, metroHoursPerWeek: 2, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 115, gridRegion: 'europe',
               heatingType: 'solar', heatingHoursPerDay: 3, cookingFuelType: 'electric',
-              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodPct: 62,
+              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodLevel: 'mostly_local',
               newClothingItemsPerYear: 2, clothingType: 'sustainable', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 180, streamingHoursPerDay: 1,
               hotWaterSource: 'solar', showerMinutesPerDay: 6, bathsPerWeek: 0,
@@ -383,7 +401,7 @@ const USERS = [
               busHoursPerWeek: 5, trainHoursPerWeek: 6, metroHoursPerWeek: 2, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 110, gridRegion: 'europe',
               heatingType: 'solar', heatingHoursPerDay: 3, cookingFuelType: 'electric',
-              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodPct: 65,
+              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodLevel: 'mostly_local',
               newClothingItemsPerYear: 2, clothingType: 'sustainable', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 170, streamingHoursPerDay: 1,
               hotWaterSource: 'solar', showerMinutesPerDay: 6, bathsPerWeek: 0,
@@ -394,7 +412,7 @@ const USERS = [
               busHoursPerWeek: 5, trainHoursPerWeek: 6, metroHoursPerWeek: 2, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 105, gridRegion: 'europe',
               heatingType: 'solar', heatingHoursPerDay: 3, cookingFuelType: 'electric',
-              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodPct: 65,
+              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodLevel: 'mostly_local',
               newClothingItemsPerYear: 2, clothingType: 'sustainable', newElectronicsPerYear: 1,
               generalGoodsMonthlyUSD: 160, streamingHoursPerDay: 1,
               hotWaterSource: 'solar', showerMinutesPerDay: 6, bathsPerWeek: 0,
@@ -405,7 +423,7 @@ const USERS = [
               busHoursPerWeek: 6, trainHoursPerWeek: 6, metroHoursPerWeek: 2, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 100, gridRegion: 'europe',
               heatingType: 'solar', heatingHoursPerDay: 2, cookingFuelType: 'electric',
-              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodPct: 68,
+              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodLevel: 'mostly_local',
               newClothingItemsPerYear: 1, clothingType: 'sustainable', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 150, streamingHoursPerDay: 1,
               hotWaterSource: 'solar', showerMinutesPerDay: 6, bathsPerWeek: 0,
@@ -416,7 +434,7 @@ const USERS = [
               busHoursPerWeek: 6, trainHoursPerWeek: 7, metroHoursPerWeek: 2, motorbikeKmPerWeek: 0,
               electricityKwhPerMonth: 95, gridRegion: 'europe',
               heatingType: 'solar', heatingHoursPerDay: 2, cookingFuelType: 'electric',
-              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodPct: 70,
+              householdSize: 1, dietType: 'vegan', foodWasteLevel: 'low', localFoodLevel: 'mostly_local',
               newClothingItemsPerYear: 1, clothingType: 'sustainable', newElectronicsPerYear: 0,
               generalGoodsMonthlyUSD: 140, streamingHoursPerDay: 1,
               hotWaterSource: 'solar', showerMinutesPerDay: 5, bathsPerWeek: 0,

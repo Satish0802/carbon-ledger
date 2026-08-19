@@ -242,3 +242,53 @@
   margin: 0;
 }
 .calc-field input[type="number"] { -moz-appearance: textfield; }
+/* ── Bill upload ── */
+.calc-bill-upload {
+  margin: -0.5rem 0 1rem;
+}
+.calc-bill-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 13px;
+  font-weight: 500;
+  color: #2d6a4f;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  cursor: pointer;
+  transition: background .2s ease, border-color .2s ease;
+}
+.calc-bill-upload-btn:hover {
+  background: var(--card);
+  border-color: #2d6a4f;
+}
+.calc-bill-upload-msg {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 0.4rem;
+}
+.calc-bill-upload-msg.error {
+  color: #c0392b;
+}
+
+/* ── Water step: bill vs manual-estimate divider ── */
+.calc-water-divider {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  margin: 1.25rem 0 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+.calc-water-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: -0.5rem;
+}
+.calc-field input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

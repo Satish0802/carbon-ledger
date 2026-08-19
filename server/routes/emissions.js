@@ -5,10 +5,12 @@ const UserProfile   = require('../models/UserProfile');
 const Goal           = require('../models/Goal');
 const authMiddleware = require('../middleware/cookies');
 const admin = require('../middleware/admin'); // Optional: restrict some routes to admins
+const { uploadBill } = require('../middleware/upload');
+const { parseBillBuffer } = require('../utils/billParser');
 const {
-    TRANSPORT, GRID_FACTORS, HEATING, ELECTRIC_HEATER_KW,
+    TRANSPORT, GRID_FACTORS, HEATING, ELECTRIC_HEATER_KW, HEAT_PUMP_COP,
     COOKING, COOKING_KWH_PER_MEAL,
-    DIET, FOOD_WASTE, LOCAL_FOOD_MAX_DISCOUNT,
+    DIET, FOOD_WASTE, LOCAL_FOOD,
     SHOPPING, WATER, BENCHMARKS,
 } = require('../constants/emissionfactors');
 
@@ -30,13 +32,13 @@ const NUMERIC_CAPS = {
     electricityKwhPerMonth: 10_000,
     heatingHoursPerDay: 24,
     householdSize: 20,
-    localFoodPct: 100,
     newClothingItemsPerYear: 500,
     newElectronicsPerYear: 50,
     generalGoodsMonthlyUSD: 10_000,
     streamingHoursPerDay: 24,
     showerMinutesPerDay: 180,
     bathsPerWeek: 50,
+    waterLitresPerMonth: 200_000,
 };
 
 // Enum fields default to an empty string on the frontend until the user
@@ -45,8 +47,9 @@ const NUMERIC_CAPS = {
 // fall back to each field's schema default instead.
 const ENUM_DEFAULTS = {
     carType:         { allowed: ['none', 'petrol', 'diesel', 'hybrid', 'electric'], fallback: 'none' },
+    motorbikeType:   { allowed: ['none', 'petrol', 'electric'], fallback: 'petrol' },
     gridRegion:      {
-        allowed: ['global_average', 'europe', 'north_america', 'latin_america', 'china', 'india', 'southeast_asia', 'middle_east', 'africa', 'oceania'],
+        allowed: Object.keys(GRID_FACTORS), // derived from emissionfactors.js — never drifts out of sync
         fallback: 'global_average',
     },
     heatingType:     {
@@ -54,8 +57,10 @@ const ENUM_DEFAULTS = {
         fallback: 'none',
     },
     cookingFuelType: { allowed: ['electric', 'natural_gas', 'lpg', 'biomass'], fallback: 'electric' },
+    renewableElectricity: { allowed: ['no', 'half', 'yes'], fallback: 'no' },
     dietType:        { allowed: ['heavy_meat', 'medium_meat', 'low_meat', 'pescatarian', 'vegetarian', 'vegan'], fallback: 'medium_meat' },
     foodWasteLevel:  { allowed: ['low', 'medium', 'high'], fallback: 'medium' },
+    localFoodLevel:  { allowed: ['mostly_local', 'mixed', 'mostly_imported'], fallback: 'mixed' },
     clothingType:    { allowed: ['fast_fashion', 'mixed', 'sustainable'], fallback: 'mixed' },
     hotWaterSource:  { allowed: ['electric', 'natural_gas', 'solar', 'heat_pump'], fallback: 'electric' },
 };
@@ -91,7 +96,8 @@ function calcTransport(t) {
     const trainKg = (t.trainHoursPerWeek || 0) * TRANSPORT.transit.train * weeksPerYear;
     const metroKg = (t.metroHoursPerWeek || 0) * TRANSPORT.transit.metro * weeksPerYear;
 
-    const bikeKg  = (t.motorbikeKmPerWeek || 0) * TRANSPORT.motorbike * weeksPerYear;
+    const motorbikeFactor = TRANSPORT.motorbike[t.motorbikeType] ?? TRANSPORT.motorbike.petrol;
+    const bikeKg  = (t.motorbikeKmPerWeek || 0) * motorbikeFactor * weeksPerYear;
 
     return Math.round(carKg + flightKg + busKg + trainKg + metroKg + bikeKg);
 }
@@ -100,14 +106,25 @@ function calcEnergy(e) {
     const gridFactor = GRID_FACTORS[e.gridRegion] || GRID_FACTORS.global_average;
     const monthsPerYear = 12;
 
+    // Renewable electricity (solar panels, green tariff, net-metering, or a
+    // predominantly hydro/nuclear national grid) displaces grid emissions.
+    // Three tiers instead of an exact % — most people can say "none / some /
+    // all" honestly but can't state a precise percentage.
+    const RENEWABLE_FRACTION = { no: 0, half: 0.5, yes: 1 };
+    const renewableFraction = RENEWABLE_FRACTION[e.renewableElectricity] ?? 0;
+    const effectiveGridFactor = gridFactor * (1 - renewableFraction);
+
     // Electricity
-    const electricityKg = (e.electricityKwhPerMonth || 0) * gridFactor * monthsPerYear;
+    const electricityKg = (e.electricityKwhPerMonth || 0) * effectiveGridFactor * monthsPerYear;
 
     // Heating
     let heatingKg = 0;
     if (e.heatingType === 'electric') {
         // electric heater: avg 2kW × hours/day × 365
-        heatingKg = ELECTRIC_HEATER_KW * (e.heatingHoursPerDay || 0) * 365 * gridFactor;
+        heatingKg = ELECTRIC_HEATER_KW * (e.heatingHoursPerDay || 0) * 365 * effectiveGridFactor;
+    } else if (e.heatingType === 'heat_pump') {
+        // heat pump: same draw as electric heater but ÷ COP (moves heat, doesn't generate it)
+        heatingKg = (ELECTRIC_HEATER_KW * (e.heatingHoursPerDay || 0) * 365 * effectiveGridFactor) / HEAT_PUMP_COP;
     } else if (HEATING[e.heatingType]) {
         // combustion fuels: kWh output approximated as 2kW × hours
         heatingKg = ELECTRIC_HEATER_KW * (e.heatingHoursPerDay || 0) * 365 * HEATING[e.heatingType];
@@ -117,7 +134,7 @@ function calcEnergy(e) {
     const mealsPerYear = 2 * 365;
     let cookingKg = 0;
     if (e.cookingFuelType === 'electric') {
-        cookingKg = mealsPerYear * COOKING_KWH_PER_MEAL * gridFactor;
+        cookingKg = mealsPerYear * COOKING_KWH_PER_MEAL * effectiveGridFactor;
     } else if (COOKING[e.cookingFuelType]) {
         cookingKg = mealsPerYear * COOKING[e.cookingFuelType];
     }
@@ -132,9 +149,8 @@ function calcEnergy(e) {
 function calcDiet(d) {
     const base        = DIET[d.dietType] || DIET.medium_meat;
     const wasteMult   = FOOD_WASTE[d.foodWasteLevel] || FOOD_WASTE.medium;
-    const localPct    = Math.min(Math.max(d.localFoodPct || 30, 0), 100);
-    const localDiscount = 1 - (localPct / 100) * LOCAL_FOOD_MAX_DISCOUNT;
-    return Math.round(base * wasteMult * localDiscount);
+    const localMult   = LOCAL_FOOD[d.localFoodLevel] || LOCAL_FOOD.mixed;
+    return Math.round(base * wasteMult * localMult);
 }
 
 function calcShopping(s) {
@@ -147,9 +163,24 @@ function calcShopping(s) {
 
 function calcWater(w) {
     const factor = WATER.hotWater[w.hotWaterSource] || WATER.hotWater.electric;
+
+    // Path A — user gave (or a bill upload filled in) a real monthly total.
+    // More accurate than the shower/bath guess, so it wins when present.
+    if (w.waterLitresPerMonth > 0) {
+        const litresPerYear = w.waterLitresPerMonth * 12;
+        const hotLitresPerYear = litresPerYear * WATER.hotWaterFractionOfTotal;
+        const heatingKg = hotLitresPerYear * factor;
+        const supplyKg  = litresPerYear * WATER.supplyTreatmentPerLitre;
+        return Math.round(heatingKg + supplyKg);
+    }
+
+    // Path B — fallback for users without a bill handy.
     const showerLitresPerYear = (w.showerMinutesPerDay || 0) * WATER.showerLitresPerMinute * 365;
     const bathLitresPerYear   = (w.bathsPerWeek        || 0) * WATER.bathLitres * 52;
-    return Math.round((showerLitresPerYear + bathLitresPerYear) * factor);
+    const litresPerYear = showerLitresPerYear + bathLitresPerYear;
+    const heatingKg = litresPerYear * factor;
+    const supplyKg  = litresPerYear * WATER.supplyTreatmentPerLitre;
+    return Math.round(heatingKg + supplyKg);
 }
 
 function calcPercentile(totalKg) {
@@ -191,6 +222,27 @@ async function syncGoalProgress(userId, categoryKg) {
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
+
+// POST /emissions/parse-bill — extract kWh/litre usage from an uploaded PDF bill.
+// Best-effort only: parsed numbers are returned for the frontend to prefill an
+// editable field, never auto-submitted. The PDF buffer is never written to disk.
+router.post('/parse-bill', authMiddleware, uploadBill.single('bill'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No PDF uploaded (field name: "bill")' });
+
+        const result = await parseBillBuffer(req.file.buffer);
+
+        if (result.electricityKwh === null && result.waterLitres === null) {
+            return res.status(422).json({
+                error: "Couldn't find a usage figure in this PDF — enter it manually.",
+                ...result,
+            });
+        }
+        res.json(result);
+    } catch (err) {
+        res.status(400).json({ error: err.message || 'Could not read this PDF.' });
+    }
+});
 
 // POST /emissions — save a new calculator submission
 router.post('/', authMiddleware, async (req, res) => {

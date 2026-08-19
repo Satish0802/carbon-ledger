@@ -28,4 +28,19 @@ const uploadAvatar = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
 });
 
-module.exports = { uploadAvatar, AVATAR_DIR };
+// ─── Bill uploads (PDF) ───────────────────────────────────────────────────────
+// Parsed in-memory and discarded — never written to disk, since utility bills
+// carry the user's name/address and shouldn't linger as files.
+
+const uploadBill = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype !== 'application/pdf') {
+      return cb(new Error('Only PDF files are allowed'));
+    }
+    cb(null, true);
+  },
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
+});
+
+module.exports = { uploadAvatar, AVATAR_DIR, uploadBill };

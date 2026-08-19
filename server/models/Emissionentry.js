@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { GRID_FACTORS } = require('../constants/emissionfactors');
 
 // Sane upper bounds — generous enough for real users, tight enough to block
 // garbage/malicious payloads (e.g. carKmPerWeek: 999999999) from ever reaching
@@ -18,6 +19,7 @@ const BOUNDS = {
   hoursPerDay:      24,
   showerMinDay:     180,
   bathsPerWeek:     50,
+  waterLitresPerMonth: 200_000,
 };
 
 const emissionEntrySchema = new mongoose.Schema({
@@ -43,16 +45,19 @@ const emissionEntrySchema = new mongoose.Schema({
   busHoursPerWeek:       { type: Number, default: 0, min: 0, max: BOUNDS.hoursPerWeek },
   trainHoursPerWeek:     { type: Number, default: 0, min: 0, max: BOUNDS.hoursPerWeek },
   metroHoursPerWeek:     { type: Number, default: 0, min: 0, max: BOUNDS.hoursPerWeek },
+  motorbikeType: {
+    type: String,
+    enum: ['none', 'petrol', 'electric'],
+    default: 'petrol',
+  },
   motorbikeKmPerWeek:    { type: Number, default: 0, min: 0, max: BOUNDS.kmPerWeek },
 
   // ── Home Energy ────────────────────────────────────────────────────────────
   electricityKwhPerMonth: { type: Number, default: 0, min: 0, max: BOUNDS.kwhPerMonth },
+  renewableElectricity: { type: String, enum: ['no', 'half', 'yes'], default: 'no' },
   gridRegion: {
     type: String,
-    enum: [
-      'global_average', 'europe', 'north_america', 'latin_america',
-      'china', 'india', 'southeast_asia', 'middle_east', 'africa', 'oceania',
-    ],
+    enum: Object.keys(GRID_FACTORS), // derived from emissionfactors.js — never drifts out of sync
     default: 'global_average',
   },
   heatingType: {
@@ -79,7 +84,7 @@ const emissionEntrySchema = new mongoose.Schema({
     enum: ['low', 'medium', 'high'],
     default: 'medium',
   },
-  localFoodPct: { type: Number, default: 30, min: 0, max: BOUNDS.pct },
+  localFoodLevel: { type: String, enum: ['mostly_local', 'mixed', 'mostly_imported'], default: 'mixed' },
 
   // ── Shopping ──────────────────────────────────────────────────────────────
   newClothingItemsPerYear: { type: Number, default: 0, min: 0, max: BOUNDS.clothingItems },
@@ -100,6 +105,7 @@ const emissionEntrySchema = new mongoose.Schema({
   },
   showerMinutesPerDay: { type: Number, default: 0, min: 0, max: BOUNDS.showerMinDay },
   bathsPerWeek: { type: Number, default: 0, min: 0, max: BOUNDS.bathsPerWeek },
+  waterLitresPerMonth: { type: Number, default: 0, min: 0, max: BOUNDS.waterLitresPerMonth },
 
   // ── Subtotals (kg CO2e / year, calculated server-side) ────────────────────
   transportKg: { type: Number, default: 0, min: 0 },

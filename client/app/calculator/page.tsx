@@ -11,6 +11,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 interface FormData {
   carType: string;
   carKmPerWeek: number;
+  motorbikeType: string;
   shortHaulFlightsPerYear: number;
   mediumHaulFlightsPerYear: number;
   longHaulFlightsPerYear: number;
@@ -19,6 +20,7 @@ interface FormData {
   metroHoursPerWeek: number;
   motorbikeKmPerWeek: number;
   electricityKwhPerMonth: number;
+  renewableElectricity: string;
   gridRegion: string;
   heatingType: string;
   heatingHoursPerDay: number;
@@ -26,13 +28,14 @@ interface FormData {
   householdSize: number;
   dietType: string;
   foodWasteLevel: string;
-  localFoodPct: number;
+  localFoodLevel: string;
   newClothingItemsPerYear: number;
   clothingType: string;
   newElectronicsPerYear: number;
   generalGoodsMonthlyUSD: number;
   streamingHoursPerDay: number;
   hotWaterSource: string;
+  waterLitresPerMonth: number;
   showerMinutesPerDay: number;
   bathsPerWeek: number;
 }
@@ -40,6 +43,7 @@ interface FormData {
 const INITIAL: FormData = {
   carType: "",
   carKmPerWeek: NaN,
+  motorbikeType: "petrol",
   shortHaulFlightsPerYear: NaN,
   mediumHaulFlightsPerYear: NaN,
   longHaulFlightsPerYear: NaN,
@@ -48,6 +52,7 @@ const INITIAL: FormData = {
   metroHoursPerWeek: NaN,
   motorbikeKmPerWeek: NaN,
   electricityKwhPerMonth: NaN,
+  renewableElectricity: "no",
   gridRegion: "",
   heatingType: "",
   heatingHoursPerDay: NaN,
@@ -55,13 +60,14 @@ const INITIAL: FormData = {
   householdSize: NaN,
   dietType: "",
   foodWasteLevel: "",
-  localFoodPct: NaN,
+  localFoodLevel: "mixed",
   newClothingItemsPerYear: NaN,
   clothingType: "mixed",
   newElectronicsPerYear: NaN,
   generalGoodsMonthlyUSD: NaN,
   streamingHoursPerDay: NaN,
   hotWaterSource: "electric",
+  waterLitresPerMonth: NaN,
   showerMinutesPerDay: NaN,
   bathsPerWeek: NaN,
 };
@@ -99,6 +105,63 @@ function YesNo({ label, value, onChange }: { label: string; value: boolean | nul
         </label>
       </div>
     </Field>
+  );
+}
+
+// Upload a utility bill PDF and let the server guess the usage figure.
+// The guess only ever lands in the normal editable input above it — never
+// submitted silently — so a bad guess is a one-click fix, not a bad entry.
+type BillResult = { electricityKwh: number | null; waterLitres: number | null; error?: string };
+
+function BillUpload({ kind, onExtract }: { kind: "electricity" | "water"; onExtract: (r: BillResult) => void }) {
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function handleFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    setStatus("loading");
+    setMessage(null);
+    try {
+      const body = new FormData();
+      body.append("bill", file);
+      const res = await fetch(`${API}/emissions/parse-bill`, {
+        method: "POST",
+        credentials: "include",
+        body,
+      });
+      const data: BillResult = await res.json();
+      if (!res.ok) throw new Error(data.error || "Couldn't read that PDF.");
+
+      const found = kind === "electricity" ? data.electricityKwh : data.waterLitres;
+      if (found === null || found === undefined) {
+        setStatus("error");
+        setMessage("Couldn't find a usage figure in this PDF — enter it manually below.");
+        return;
+      }
+      onExtract(data);
+      setStatus("done");
+      setMessage(
+        kind === "electricity"
+          ? `Found ${found} kWh — filled in below, double-check it.`
+          : `Found ${found} L for the period — filled in below, double-check it.`
+      );
+    } catch (err) {
+      setStatus("error");
+      setMessage(err instanceof Error ? err.message : "Couldn't read that PDF.");
+    }
+  }
+
+  return (
+    <div className="calc-bill-upload">
+      <label className="calc-bill-upload-btn">
+        {status === "loading" ? "Reading PDF…" : `Or upload your ${kind} bill (PDF)`}
+        <input type="file" accept="application/pdf" onChange={handleFile} disabled={status === "loading"} hidden />
+      </label>
+      {message && <p className={`calc-bill-upload-msg${status === "error" ? " error" : ""}`}>{message}</p>}
+    </div>
   );
 }
 
@@ -191,9 +254,17 @@ function clean(form: FormData): FormData {
         onChange={(v) => { setHasMotorbike(v); if (!v) setForm((p) => ({ ...p, motorbikeKmPerWeek: 0 })); }}
       />
       {hasMotorbike && (
-        <Field label="Motorbike/scooter — km per week">
-          <input type="text" inputMode="numeric" min="0" value={num(form, "motorbikeKmPerWeek")} placeholder="e.g. 50" onChange={(e) => set("motorbikeKmPerWeek", e)} />
-        </Field>
+        <>
+          <Field label="Is it electric?">
+            <select value={form.motorbikeType} onChange={(e) => set("motorbikeType", e)}>
+              <option value="petrol">Petrol / Gas</option>
+              <option value="electric">Electric</option>
+            </select>
+          </Field>
+          <Field label="Motorbike/scooter — km per week">
+            <input type="text" inputMode="numeric" min="0" value={num(form, "motorbikeKmPerWeek")} placeholder="e.g. 50" onChange={(e) => set("motorbikeKmPerWeek", e)} />
+          </Field>
+        </>
       )}
 
       <YesNo
@@ -250,20 +321,90 @@ function clean(form: FormData): FormData {
       <Field label="Monthly electricity usage (kWh)">
         <input type="text" inputMode="numeric" min="0" value={num(form, "electricityKwhPerMonth")} placeholder="e.g. 250 kwh" onChange={(e) => set("electricityKwhPerMonth", e)} />
       </Field>
+      <BillUpload
+        kind="electricity"
+        onExtract={(r) => {
+          if (r.electricityKwh != null) setForm((p) => ({ ...p, electricityKwhPerMonth: r.electricityKwh as number }));
+        }}
+      />
+
+      <Field label="Is any of that electricity from renewable sources? (solar panels, green tariff, or a mostly hydro/nuclear national grid)">
+        <select value={form.renewableElectricity} onChange={(e) => set("renewableElectricity", e)}>
+          <option value="no">No</option>
+          <option value="half">Some — roughly half</option>
+          <option value="yes">Yes — all or nearly all</option>
+        </select>
+      </Field>
 
       <Field label="Where do you live? (affects grid carbon intensity)">
         <select value={form.gridRegion} onChange={(e) => set("gridRegion", e)}>
           <option value="" disabled>Select an option</option>
-          <option value="global_average">Not sure / Global average</option>
-          <option value="europe">Europe</option>
-          <option value="north_america">North America</option>
-          <option value="latin_america">Latin America</option>
-          <option value="china">China</option>
-          <option value="india">India</option>
-          <option value="southeast_asia">Southeast Asia</option>
-          <option value="middle_east">Middle East</option>
-          <option value="africa">Africa</option>
-          <option value="oceania">Oceania / Australia</option>
+          <optgroup label="South Asia">
+            <option value="nepal">Nepal</option>
+            <option value="india">India</option>
+            <option value="pakistan">Pakistan</option>
+            <option value="bangladesh">Bangladesh</option>
+            <option value="sri_lanka">Sri Lanka</option>
+          </optgroup>
+          <optgroup label="East & Southeast Asia">
+            <option value="china">China</option>
+            <option value="japan">Japan</option>
+            <option value="south_korea">South Korea</option>
+            <option value="vietnam">Vietnam</option>
+            <option value="thailand">Thailand</option>
+            <option value="malaysia">Malaysia</option>
+            <option value="philippines">Philippines</option>
+            <option value="indonesia">Indonesia</option>
+          </optgroup>
+          <optgroup label="Europe">
+            <option value="iceland">Iceland</option>
+            <option value="norway">Norway</option>
+            <option value="sweden">Sweden</option>
+            <option value="switzerland">Switzerland</option>
+            <option value="france">France</option>
+            <option value="austria">Austria</option>
+            <option value="uk">United Kingdom</option>
+            <option value="spain">Spain</option>
+            <option value="italy">Italy</option>
+            <option value="germany">Germany</option>
+            <option value="poland">Poland</option>
+            <option value="russia">Russia</option>
+          </optgroup>
+          <optgroup label="Americas">
+            <option value="canada">Canada</option>
+            <option value="united_states">United States</option>
+            <option value="mexico">Mexico</option>
+            <option value="brazil">Brazil</option>
+            <option value="colombia">Colombia</option>
+            <option value="peru">Peru</option>
+            <option value="chile">Chile</option>
+            <option value="argentina">Argentina</option>
+            <option value="paraguay">Paraguay</option>
+          </optgroup>
+          <optgroup label="Middle East & Africa">
+            <option value="uae">UAE</option>
+            <option value="saudi_arabia">Saudi Arabia</option>
+            <option value="turkey">Turkey</option>
+            <option value="egypt">Egypt</option>
+            <option value="nigeria">Nigeria</option>
+            <option value="kenya">Kenya</option>
+            <option value="ethiopia">Ethiopia</option>
+            <option value="south_africa">South Africa</option>
+          </optgroup>
+          <optgroup label="Oceania">
+            <option value="australia">Australia</option>
+            <option value="new_zealand">New Zealand</option>
+          </optgroup>
+          <optgroup label="Not listed">
+            <option value="global_average">Not sure / Global average</option>
+            <option value="europe">Other Europe</option>
+            <option value="north_america">Other North America</option>
+            <option value="latin_america">Other Latin America</option>
+            <option value="southeast_asia">Other Southeast Asia</option>
+            <option value="middle_east">Other Middle East</option>
+            <option value="africa">Other Africa</option>
+            <option value="oceania">Other Oceania</option>
+          </optgroup>
         </select>
       </Field>
 
@@ -332,8 +473,12 @@ function clean(form: FormData): FormData {
         </select>
       </Field>
 
-      <Field label="What % of your food is locally sourced?">
-        <input type="text" inputMode="numeric" min="0" max="100" value={num(form, "localFoodPct")} placeholder="e.g. 30" onChange={(e) => set("localFoodPct", e)} />
+      <Field label="Where does most of your food come from?">
+        <select value={form.localFoodLevel || "mixed"} onChange={(e) => set("localFoodLevel", e)}>
+          <option value="mostly_local">Mostly local — farmers market, local produce</option>
+          <option value="mixed">Mixed — typical supermarket shop</option>
+          <option value="mostly_imported">Mostly imported / out-of-season</option>
+        </select>
       </Field>
     </>,
 
@@ -377,13 +522,54 @@ function clean(form: FormData): FormData {
         </select>
       </Field>
 
+      <Field label="Monthly water usage (litres) — from your bill, if you have it">
+        <input
+          type="text"
+          inputMode="numeric"
+          min="0"
+          value={num(form, "waterLitresPerMonth")}
+          onChange={(e) => set("waterLitresPerMonth", e)}
+          placeholder="e.g. 8600"
+        />
+      </Field>
+      <BillUpload
+        kind="water"
+        onExtract={(r) => {
+          if (r.waterLitres == null) return;
+          // Feeds the bill total straight into the litres field — no more
+          // guessing shower minutes from it.
+          setForm((p) => ({ ...p, waterLitresPerMonth: r.waterLitres as number }));
+        }}
+      />
+
+      <p className="calc-water-divider">Don&apos;t have a bill handy? Estimate instead:</p>
+
       <Field label="Shower — minutes per day">
-        <input type="text" inputMode="numeric" min="0" value={num(form, "showerMinutesPerDay")} onChange={(e) => set("showerMinutesPerDay", e)} placeholder="e.g. 8" />
+        <input
+          type="text"
+          inputMode="numeric"
+          min="0"
+          value={num(form, "showerMinutesPerDay")}
+          onChange={(e) => set("showerMinutesPerDay", e)}
+          placeholder="e.g. 8"
+          disabled={num(form, "waterLitresPerMonth") !== ""}
+        />
       </Field>
 
       <Field label="Baths — per week">
-        <input type="text" inputMode="numeric" min="0" value={num(form, "bathsPerWeek")} onChange={(e) => set("bathsPerWeek", e)} placeholder="e.g. 0" />
+        <input
+          type="text"
+          inputMode="numeric"
+          min="0"
+          value={num(form, "bathsPerWeek")}
+          onChange={(e) => set("bathsPerWeek", e)}
+          placeholder="e.g. 0"
+          disabled={num(form, "waterLitresPerMonth") !== ""}
+        />
       </Field>
+      {num(form, "waterLitresPerMonth") !== "" && (
+        <p className="calc-water-note">Using your monthly total above instead of these — clear it to switch back.</p>
+      )}
     </>,
   ];
 
