@@ -3,6 +3,7 @@
 import { useState, ChangeEvent, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import "./calculator.css";
+import CarbonIcon from "../components/CarbonIcon";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -75,11 +76,11 @@ const INITIAL: FormData = {
 // ─── Step config ──────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { icon: "🚗", label: "Transport" },
-  { icon: "⚡", label: "Energy" },
-  { icon: "🥗", label: "Diet" },
-  { icon: "🛍️", label: "Shopping" },
-  { icon: "💧", label: "Water" },
+  { icon: "transport", label: "Transport" },
+  { icon: "energy", label: "Energy" },
+  { icon: "diet", label: "Diet" },
+  { icon: "shopping", label: "Shopping" },
+  { icon: "water", label: "Water" },
 ];
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -582,7 +583,7 @@ function clean(form: FormData): FormData {
         {/* Top bar */}
         <div className="calc-topbar">
           <div className="calc-brand">
-            <div className="calc-leaf">🌿</div>
+            <div className="calc-leaf"><CarbonIcon name="leaf" size={21} /></div>
             <span className="calc-brand-name">Carbon Ledger</span>
           </div>
           <button className="calc-back-btn" onClick={() => router.push("/dashboard")}>
@@ -597,7 +598,7 @@ function clean(form: FormData): FormData {
               key={label}
               className={`calc-step-pill${i === step ? " active" : i < step ? " done" : ""}`}
             >
-              <span className="calc-step-icon">{i < step ? "✓" : icon}</span>
+              <span className="calc-step-icon">{i < step ? <CarbonIcon name="check" size={14} /> : <CarbonIcon name={icon as any} size={16} />}</span>
               <span>{label}</span>
             </div>
           ))}
@@ -612,14 +613,14 @@ function clean(form: FormData): FormData {
         <div className="calc-card">
           <div className="calc-card-header">
             <div className="calc-card-title">
-              {STEPS[step].icon} {STEPS[step].label}
+              <CarbonIcon name={STEPS[step].icon as any} size={18} /> {STEPS[step].label}
             </div>
             <div className="calc-card-sub">
               Step {step + 1} of {STEPS.length} — fill in what applies to you
             </div>
           </div>
 
-          {error && <div className="calc-error">⚠️ {error}</div>}
+          {error && <div className="calc-error"><CarbonIcon name="warning" size={15} /> {error}</div>}
 
           <form onSubmit={handleNext}>
             {panels[step]}

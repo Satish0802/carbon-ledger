@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import "./goal.css";
 import { apiFetch, AuthExpiredError } from "../../lib/api";
+import CarbonIcon from "../../components/CarbonIcon";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,13 +42,13 @@ type Category = "transport" | "energy" | "diet" | "shopping" | "water" | "overal
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CAT_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  transport: { label: "Transport", color: "#3b82f6", bg: "#dbeafe", icon: "🚗" },
-  energy:    { label: "Energy",    color: "#f59e0b", bg: "#fef3c7", icon: "⚡" },
-  diet:      { label: "Diet",      color: "#22c55e", bg: "#dcfce7", icon: "🥗" },
-  shopping:  { label: "Shopping",  color: "#f43f5e", bg: "#ffe4e6", icon: "🛍️" },
-  water:     { label: "Water",     color: "#06b6d4", bg: "#cffafe", icon: "💧" },
-  overall:   { label: "Overall",   color: "#8b5cf6", bg: "#ede9fe", icon: "🌍" },
+const CAT_META: Record<string, { label: string; color: string; bg: string; icon: "transport" | "energy" | "diet" | "shopping" | "water" | "globe" }> = {
+  transport: { label: "Transport", color: "var(--cat-transport)", bg: "var(--cat-transport-bg)", icon: "transport" },
+  energy:    { label: "Energy",    color: "var(--cat-energy)", bg: "var(--cat-energy-bg)", icon: "energy" },
+  diet:      { label: "Diet",      color: "var(--cat-diet)", bg: "var(--cat-diet-bg)", icon: "diet" },
+  shopping:  { label: "Shopping",  color: "var(--cat-shopping)", bg: "var(--cat-shopping-bg)", icon: "shopping" },
+  water:     { label: "Water",     color: "var(--cat-water)", bg: "var(--cat-water-bg)", icon: "water" },
+  overall:   { label: "Overall",   color: "var(--cat-energy)", bg: "var(--cat-energy-bg)", icon: "globe" },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -69,6 +70,26 @@ function defaultDeadline() {
   const d = new Date();
   d.setDate(d.getDate() + 90);
   return d.toISOString().slice(0, 10);
+}
+
+function goalCurrentKg(goal: Goal, entry: EmissionEntry | null) {
+  if (!entry) return goal.latestKg ?? null;
+  const values: Record<string, number> = {
+    transport: entry.transportKg,
+    energy: entry.energyKg,
+    diet: entry.dietKg,
+    shopping: entry.shoppingKg,
+    water: entry.waterKg,
+    overall: entry.totalKgPerYear,
+  };
+  return values[goal.category] ?? goal.latestKg ?? null;
+}
+
+function goalProgress(goal: Goal, currentKg: number | null) {
+  if (currentKg === null) return 0;
+  const denom = goal.baselineKg - goal.targetKg;
+  if (denom <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round(((goal.baselineKg - currentKg) / denom) * 100)));
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -208,7 +229,7 @@ function GoalsInner() {
   const activeGoals   = goals.filter((g) => g.status === "active");
   const achievedGoals = goals.filter((g) => g.status === "achieved");
   const avgProgress   = activeGoals.length
-    ? Math.round(activeGoals.reduce((s, g) => s + Math.min(Math.max(g.latestPctAchieved, 0), 100), 0) / activeGoals.length)
+    ? Math.round(activeGoals.reduce((s, g) => s + goalProgress(g, goalCurrentKg(g, latest)), 0) / activeGoals.length)
     : 0;
 
   return (
@@ -216,7 +237,7 @@ function GoalsInner() {
       <div className="goals-inner">
         <div className="goals-topbar">
           <div className="goals-brand">
-            <div className="goals-leaf">🌿</div>
+            <div className="goals-leaf"><CarbonIcon name="leaf" size={21} /></div>
             <span className="goals-brand-name">Carbon Ledger</span>
           </div>
           <button className="goals-back" onClick={() => router.push("/dashboard")}>← Back to dashboard</button>
@@ -227,7 +248,7 @@ function GoalsInner() {
           <div className="goals-sub">Track and manage your emission reduction targets</div>
         </div>
 
-        {error && <div className="goals-error">⚠️ {error}</div>}
+        {error && <div className="goals-error"><CarbonIcon name="warning" size={15} /> {error}</div>}
 
         <div className="goals-stats">
           <div className="goals-stat">
@@ -264,7 +285,7 @@ function GoalsInner() {
                   onChange={(e) => handleCategoryChange(e.target.value as Category)}
                 >
                   {Object.keys(CAT_META).map((k) => (
-                    <option key={k} value={k}>{CAT_META[k].icon} {CAT_META[k].label}</option>
+                    <option key={k} value={k}>{CAT_META[k].label}</option>
                   ))}
                 </select>
               </div>
@@ -333,35 +354,46 @@ function GoalsInner() {
         ) : (
           goals.filter((g) => g.status !== "cancelled").map((g) => {
             const meta = CAT_META[g.category] ?? CAT_META.overall;
-            const pctDone = Math.min(Math.max(g.latestPctAchieved, 0), 100);
+            const currentKg = goalCurrentKg(g, latest);
+            const pctDone = goalProgress(g, currentKg);
+            const regression = currentKg !== null && currentKg > g.baselineKg;
             const overdue = new Date(g.deadline) < new Date() && g.status === "active";
             return (
               <div key={g._id} className="goal-card">
                 <div className="goal-card-top">
                   <span className="goal-pill" style={{ background: meta.bg, color: meta.color }}>
-                    {meta.icon} {meta.label}
+                    <CarbonIcon name={meta.icon as any} size={13} /> {meta.label}
                   </span>
                   {g.status === "achieved" && <span className="goal-badge-achieved">✓ Achieved</span>}
                   {overdue && <span className="goal-badge-overdue">Overdue</span>}
                   {g.status === "active" && (
-                    <button className="goal-cancel-btn" onClick={() => handleCancelGoal(g._id)} title="Cancel goal">✕</button>
+                    <button className="goal-cancel-btn" onClick={() => handleCancelGoal(g._id)} title="Cancel goal"><CarbonIcon name="close" size={15} /></button>
                   )}
                 </div>
                 <div className="goal-title">{g.title}</div>
                 <div className="goal-progress-row">
-                  <div className="goal-track">
+                  <div className={`goal-track ${regression ? "is-regression" : ""}`}>
                     <div
                       className="goal-fill"
-                      style={{ width: `${pctDone}%`, background: pctDone >= 100 ? "#22c55e" : meta.color }}
+                      style={{ width: `${pctDone}%`, background: g.status === "achieved" ? "var(--teal)" : meta.color }}
                     />
                   </div>
-                  <div className="goal-pct">{pctDone}%</div>
+                  <div className={`goal-pct ${regression ? "is-regression" : ""}`}>
+                    {regression ? "0%" : `${pctDone}%`}
+                  </div>
                 </div>
                 <div className="goal-meta-row">
                   <span>Baseline: {fmtT(g.baselineKg)}</span>
+                  <span>Current: {currentKg === null ? "—" : fmtT(currentKg)}</span>
                   <span>Target: {fmtT(g.targetKg)}</span>
                   <span>Deadline: {fmtDate(g.deadline)}</span>
                 </div>
+                {regression && currentKg !== null && (
+                  <div className="goal-regression">
+                    <strong>Needs attention</strong>
+                    <span>↑ {fmtT(currentKg - g.baselineKg)} above your baseline. Progress remains at 0% until emissions fall below your baseline.</span>
+                  </div>
+                )}
               </div>
             );
           })

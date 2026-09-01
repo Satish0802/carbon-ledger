@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import GoogleButton from '../components/GoogleButton';
+import CarbonIcon from '../components/CarbonIcon';
 import '../auth.css';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -73,7 +74,7 @@ export default function LoginPage() {
   return (
     <div className="auth-shell">
       <div className="auth-brand">
-        <div className="auth-leaf">🌿</div>
+        <div className="auth-leaf"><CarbonIcon name="leaf" size={22} /></div>
         <div>
           <div className="auth-brand-name">Carbon Ledger</div>
           <div className="auth-brand-sub">Personal emission tracker</div>
@@ -86,7 +87,7 @@ export default function LoginPage() {
 
         {error && (
           <div className="auth-alert error">
-            <span>⚠️</span>
+            <CarbonIcon name="warning" size={15} />
             <span>{error}</span>
           </div>
         )}
@@ -122,9 +123,9 @@ export default function LoginPage() {
       </div>
 
       <div className="auth-trust">
-        <span className="auth-trust-item">🔒 Secure login</span>
-        <span className="auth-trust-item">📊 IPCC AR6 factors</span>
-        <span className="auth-trust-item">🌍 Track your impact</span>
+        <span className="auth-trust-item"><CarbonIcon name="lock" size={14} /> Secure login</span>
+        <span className="auth-trust-item"><CarbonIcon name="chart" size={14} /> IPCC AR6 factors</span>
+        <span className="auth-trust-item"><CarbonIcon name="globe" size={14} /> Track your impact</span>
       </div>
     </div>
   );

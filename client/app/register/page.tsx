@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import GoogleButton from '../components/GoogleButton';
+import CarbonIcon from '../components/CarbonIcon';
 import '../auth.css';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -72,7 +73,7 @@ export default function RegisterPage() {
   return (
     <div className="auth-shell">
       <div className="auth-brand">
-        <div className="auth-leaf">🌿</div>
+        <div className="auth-leaf"><CarbonIcon name="leaf" size={22} /></div>
         <div>
           <div className="auth-brand-name">Carbon Ledger</div>
           <div className="auth-brand-sub">Personal emission tracker</div>
@@ -83,7 +84,7 @@ export default function RegisterPage() {
         <h1 className="auth-card-title">Create your account</h1>
         <p className="auth-card-subtitle">Start tracking your carbon footprint for free</p>
 
-        {error && <div className="auth-alert error"><span>⚠️</span><span>{error}</span></div>}
+        {error && <div className="auth-alert error"><CarbonIcon name="warning" size={15} /><span>{error}</span></div>}
         {success && <div className="auth-alert success"><span>✓</span><span>Account created! Redirecting to login…</span></div>}
 
         <form onSubmit={handleSubmit}>
@@ -131,9 +132,9 @@ export default function RegisterPage() {
       </div>
 
       <div className="auth-trust">
-        <span className="auth-trust-item">🔒 Secure &amp; private</span>
-        <span className="auth-trust-item">📊 IPCC AR6 factors</span>
-        <span className="auth-trust-item">🌍 Track your impact</span>
+        <span className="auth-trust-item"><CarbonIcon name="lock" size={14} /> Secure &amp; private</span>
+        <span className="auth-trust-item"><CarbonIcon name="chart" size={14} /> IPCC AR6 factors</span>
+        <span className="auth-trust-item"><CarbonIcon name="globe" size={14} /> Track your impact</span>
       </div>
     </div>
   );

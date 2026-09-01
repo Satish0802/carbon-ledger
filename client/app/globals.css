@@ -1,16 +1,361 @@
-html {
-  font-size: 16px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap');
+
+:root {
+  color-scheme: light;
+  --ink: #151515;
+  --ink-soft: #272727;
+  --paper: #f3f0e8;
+  --paper-2: #e8e4da;
+  --white: #fffdf8;
+  --muted: #73716b;
+  --line: #d5d1c7;
+  --accent: #ff5a36;
+  --accent-soft: #fbe0d8;
+  --teal: #1f6f68;
+  --teal-soft: #dcebe7;
+  --violet: #6c5ce7;
+  --blue: #2e7fa3;
+  --shadow: 0 18px 50px rgba(21, 21, 21, .08);
+  --grid-line: rgba(21,21,21,.035);
+  --cat-transport: #161616; --cat-transport-bg: #e8e4da;
+  --cat-energy: #ff5a36; --cat-energy-bg: #fbe2dc;
+  --cat-diet: #1f6f68; --cat-diet-bg: #dcebe7;
+  --cat-shopping: #6c5ce7; --cat-shopping-bg: #e9e6fb;
+  --cat-water: #2e7fa3; --cat-water-bg: #dcecf3;
+  --danger-bg: #fff1ed; --danger-border: #e7b1a5; --danger-text: #8f2e1b;
+  --success-bg: #e5f2ef; --success-text: #285b56;
+  --track: #dfdcd3;
+  --chart-good: #16a34a; --chart-good-text: #15803d; --chart-bad: #f43f5e; --chart-bad-text: #dc2626; --chart-neutral: #9ca3af; --chart-target: #3b82f6;
 }
- 
+
+html { font-size: 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
 body {
   margin: 0;
   padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Manrope', 'Avenir Next', sans-serif;
 }
- 
-/* Prevent flash of unstyled content on dark pages */
-html,
-body {
-  background: #111111;
+button, input, select, textarea { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+::selection { background: var(--ink); color: var(--paper); }
+
+/* Shared aliases retained for the existing app */
+:root {
+  --dash-bg: var(--paper);
+  --dash-card: var(--white);
+  --dash-border: var(--line);
+  --dash-text-primary: var(--ink);
+  --dash-text-muted: var(--muted);
+  --dash-track: #dfdcd3;
+  --m: var(--muted);
+  --b: var(--line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+
+/* ── Carbon Ledger theme system ─────────────────────────────────────────── */
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #f2eee5;
+  --ink-soft: #d9d4ca;
+  --paper: #0d0e0e;
+  --paper-2: #171918;
+  --white: #151716;
+  --muted: #a09d94;
+  --line: #343632;
+  --accent: #ff7656;
+  --accent-soft: #3a211b;
+  --teal: #69b7ad;
+  --teal-soft: #18302d;
+  --violet: #9b90ff;
+  --blue: #67aeca;
+  --shadow: 0 22px 60px rgba(0,0,0,.35);
+  --grid-line: rgba(242,238,229,.045);
+  --cat-transport: #e9e4d8; --cat-transport-bg: #292b28;
+  --cat-energy: #ff7656; --cat-energy-bg: #3a211b;
+  --cat-diet: #69b7ad; --cat-diet-bg: #18302d;
+  --cat-shopping: #9b90ff; --cat-shopping-bg: #27243d;
+  --cat-water: #67aeca; --cat-water-bg: #1c3038;
+  --danger-bg: #321a17; --danger-border: #704238; --danger-text: #ff9a82;
+  --success-bg: #18302d; --success-text: #8bd0c7;
+  --track: #30332f;
+  --chart-good: #69b7ad; --chart-good-text: #8bd0c7; --chart-bad: #ff7656; --chart-bad-text: #ff9a82; --chart-neutral: #777b75; --chart-target: #67aeca;
+}
+
+html[data-theme="dark"] body { background: var(--paper); }
+html[data-theme="dark"] .dash-shell,
+html[data-theme="dark"] .profile-shell,
+html[data-theme="dark"] .calc-shell {
+  background-image: radial-gradient(circle at 8% 5%, rgba(255,118,86,.10), transparent 24rem),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+}
+
+.theme-toggle {
+  position: fixed; right: 20px; bottom: 20px; z-index: 120;
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 36px; padding: 0 11px;
+  border: 1px solid var(--ink); border-radius: 999px;
+  background: var(--white); color: var(--ink);
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  cursor: pointer; font: 9px 'DM Mono', monospace;
+  text-transform: uppercase; letter-spacing: .08em;
+  transition: background .25s ease, color .25s ease, border-color .25s ease, transform .2s ease;
+}
+.theme-toggle:hover { transform: translateY(-2px); background: var(--ink); color: var(--paper); }
+.theme-toggle-icon { font-size: 15px; line-height: 1; }
+.theme-toggle-placeholder { opacity: 0; pointer-events: none; }
+
+html[data-theme="dark"] .dash-metric:first-child .dash-m-icon { background: #252825 !important; }
+html[data-theme="dark"] .dash-metric:first-child .dash-m-label { color: #aaa79e; }
+html[data-theme="dark"] .dash-metric:first-child .dash-m-delta { color: #bdbab1; }
+html[data-theme="dark"] .dash-donut-ring::before { background: var(--white); }
+html[data-theme="dark"] .dash-modal-backdrop { background: rgba(0,0,0,.72); }
+html[data-theme="dark"] .dash-modal-close { border-color: #555; }
+
+@media (max-width: 650px) {
+  .theme-toggle { right: 12px; bottom: 12px; }
+}
+
+
+/* ── Dark theme contrast pass ────────────────────────────────────────────── */
+html[data-theme="dark"] {
+  --surface: #171918;
+  --surface-raised: #1d201e;
+  --surface-soft: #232622;
+  --text-primary: #f5f1e8;
+  --text-secondary: #c2beb5;
+  --text-muted-strong: #aaa69d;
+  --line-strong: #4a4d47;
+  --track: #343833;
+  --grid-line: rgba(245,241,232,.055);
+}
+
+html[data-theme="dark"] body {
+  color: var(--text-primary);
+}
+
+/* Dashboard surfaces were using translucent LIGHT backgrounds. */
+html[data-theme="dark"] .dash-metric:not(:first-child),
+html[data-theme="dark"] .dash-card,
+html[data-theme="dark"] .dash-welcome-tag,
+html[data-theme="dark"] .dash-badge-green,
+html[data-theme="dark"] .dash-badge-red {
+  background: var(--surface) !important;
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .dash-metric:not(:first-child)::before {
+  background: var(--line-strong);
+}
+
+html[data-theme="dark"] .dash-card-title,
+html[data-theme="dark"] .dash-m-value,
+html[data-theme="dark"] .dash-bar-val,
+html[data-theme="dark"] .dash-goal-meta,
+html[data-theme="dark"] .dash-hist-row > div:first-child,
+html[data-theme="dark"] .dash-goal-name,
+html[data-theme="dark"] .dash-donut-hole strong {
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .dash-m-label,
+html[data-theme="dark"] .dash-card-hint,
+html[data-theme="dark"] .dash-bar-label,
+html[data-theme="dark"] .dash-vs-label,
+html[data-theme="dark"] .dash-empty,
+html[data-theme="dark"] .dash-hist-row span,
+html[data-theme="dark"] .dash-tip,
+html[data-theme="dark"] .dash-m-delta,
+html[data-theme="dark"] .dash-donut-hole span {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .dash-tab {
+  color: var(--text-muted-strong);
+}
+html[data-theme="dark"] .dash-tab.active {
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .dash-legend-item {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .dash-donut-ticks {
+  border-color: #5b5e58;
+}
+
+html[data-theme="dark"] .dash-tip {
+  color: var(--text-secondary);
+}
+html[data-theme="dark"] .dash-tip-icon {
+  background: var(--surface-soft);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .dash-bar-track,
+html[data-theme="dark"] .dash-goal-track,
+html[data-theme="dark"] .dash-vs-track {
+  background: var(--track);
+}
+
+html[data-theme="dark"] .dash-delete-warning {
+  background: #332b19;
+  border: 1px solid #6d5b2e;
+  color: #f3d78b;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  text-align: left;
+  margin-top: 4px;
+}
+
+html[data-theme="dark"] .dash-modal,
+html[data-theme="dark"] .dash-modal-body {
+  color: var(--text-primary);
+}
+
+/* Calculator */
+html[data-theme="dark"] .calc-card,
+html[data-theme="dark"] .calc-radio-card,
+html[data-theme="dark"] .calc-bill-upload {
+  background: var(--surface) !important;
+  color: var(--text-primary);
+}
+html[data-theme="dark"] .calc-radio-card:hover {
+  border-color: var(--text-primary);
+}
+html[data-theme="dark"] .calc-radio-sub,
+html[data-theme="dark"] .calc-hint,
+html[data-theme="dark"] .calc-card-sub,
+html[data-theme="dark"] .calc-water-divider,
+html[data-theme="dark"] .calc-step-pill {
+  color: var(--text-secondary);
+}
+html[data-theme="dark"] .calc-water-note {
+  color: #a8ddd5;
+}
+html[data-theme="dark"] .calc-bill-upload {
+  border-color: #62655e;
+}
+
+/* Goals */
+html[data-theme="dark"] .goals-stats,
+html[data-theme="dark"] .goals-form-card,
+html[data-theme="dark"] .goal-card {
+  background: var(--surface) !important;
+  color: var(--text-primary);
+}
+html[data-theme="dark"] .goals-title,
+html[data-theme="dark"] .goals-section-title,
+html[data-theme="dark"] .goal-title,
+html[data-theme="dark"] .goals-form-title,
+html[data-theme="dark"] .goals-stat-num {
+  color: var(--text-primary);
+}
+html[data-theme="dark"] .goals-sub,
+html[data-theme="dark"] .goals-stat-lbl,
+html[data-theme="dark"] .gf-label,
+html[data-theme="dark"] .goal-meta-row,
+html[data-theme="dark"] .goal-history-row,
+html[data-theme="dark"] .goals-empty {
+  color: var(--text-secondary);
+}
+
+/* Profile */
+html[data-theme="dark"] .profile-card {
+  background: var(--surface) !important;
+  color: var(--text-primary);
+}
+html[data-theme="dark"] .profile-email,
+html[data-theme="dark"] .profile-stat,
+html[data-theme="dark"] .pf-label,
+html[data-theme="dark"] .profile-danger-sub {
+  color: var(--text-secondary);
+}
+html[data-theme="dark"] .pf-input,
+html[data-theme="dark"] .pf-select {
+  background: var(--paper-2);
+  color: var(--text-primary);
+}
+
+/* Authentication */
+html[data-theme="dark"] .auth-card {
+  background: var(--surface) !important;
+  color: var(--text-primary);
+}
+html[data-theme="dark"] .auth-card-subtitle,
+html[data-theme="dark"] .auth-footer,
+html[data-theme="dark"] .auth-label {
+  color: var(--text-secondary);
+}
+html[data-theme="dark"] .auth-input {
+  background: var(--paper-2);
+  color: var(--text-primary);
+}
+html[data-theme="dark"] .auth-link {
+  color: var(--text-primary);
+}
+
+/* Keep common borders readable without becoming bright. */
+html[data-theme="dark"] .dash-card,
+html[data-theme="dark"] .dash-metric,
+html[data-theme="dark"] .calc-card,
+html[data-theme="dark"] .goal-card,
+html[data-theme="dark"] .goals-form-card,
+html[data-theme="dark"] .profile-card,
+html[data-theme="dark"] .auth-card {
+  border-color: var(--line-strong);
+}
+
+/* Final dark dashboard surface correction */
+html[data-theme="dark"] .dash-metric:first-child {
+  background: var(--surface-raised) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--line-strong) !important;
+}
+html[data-theme="dark"] .dash-metric:first-child .dash-m-icon {
+  background: #2a2d2a !important;
+  color: var(--text-primary) !important;
+}
+html[data-theme="dark"] .dash-metric:first-child .dash-m-label,
+html[data-theme="dark"] .dash-metric:first-child .dash-m-delta {
+  color: var(--text-secondary) !important;
+}
+html[data-theme="dark"] .dash-metric:first-child .dash-m-value,
+html[data-theme="dark"] .dash-metric:first-child .dash-m-unit {
+  color: var(--text-primary) !important;
+}
+html[data-theme="dark"] .dash-metric:first-child .dash-m-delta.down {
+  color: #8bd0c7 !important;
+}
+
+html[data-theme="dark"] .dash-btn-accent,
+html[data-theme="dark"] .dash-btn-primary,
+html[data-theme="dark"] .goals-new-btn,
+html[data-theme="dark"] .gf-submit-btn,
+html[data-theme="dark"] .calc-btn-next,
+html[data-theme="dark"] .pf-save-btn,
+html[data-theme="dark"] .auth-submit {
+  background: var(--text-primary);
+  color: #111311;
+  border-color: var(--text-primary);
+}
+html[data-theme="dark"] .dash-btn-accent:hover,
+html[data-theme="dark"] .dash-btn-primary:hover,
+html[data-theme="dark"] .goals-new-btn:hover,
+html[data-theme="dark"] .gf-submit-btn:hover,
+html[data-theme="dark"] .calc-btn-next:hover,
+html[data-theme="dark"] .pf-save-btn:hover,
+html[data-theme="dark"] .auth-submit:hover {
+  background: var(--accent);
+  color: #111311;
+  border-color: var(--accent);
 }

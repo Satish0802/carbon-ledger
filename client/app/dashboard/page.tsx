@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import "./dashboard.css";
 import { apiFetch, AuthExpiredError, avatarUrl } from "../lib/api";
+import CarbonIcon from "../components/CarbonIcon";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,12 +58,12 @@ type ActiveTab = "overview" | "history" | "goals";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const CAT_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  transport: { label: "Transport", color: "#3b82f6", bg: "#dbeafe", icon: "🚗" },
-  energy:    { label: "Energy",    color: "#f59e0b", bg: "#fef3c7", icon: "⚡" },
-  diet:      { label: "Diet",      color: "#22c55e", bg: "#dcfce7", icon: "🥗" },
-  shopping:  { label: "Shopping",  color: "#f43f5e", bg: "#ffe4e6", icon: "🛍️" },
-  water:     { label: "Water",     color: "#06b6d4", bg: "#cffafe", icon: "💧" },
+const CAT_META: Record<string, { label: string; color: string; bg: string; icon: "transport" | "energy" | "diet" | "shopping" | "water" | "globe" }> = {
+  transport: { label: "Transport", color: "var(--cat-transport)", bg: "var(--cat-transport-bg)", icon: "transport" },
+  energy:    { label: "Energy",    color: "var(--cat-energy)", bg: "var(--cat-energy-bg)", icon: "energy" },
+  diet:      { label: "Diet",      color: "var(--cat-diet)", bg: "var(--cat-diet-bg)", icon: "diet" },
+  shopping:  { label: "Shopping",  color: "var(--cat-shopping)", bg: "var(--cat-shopping-bg)", icon: "shopping" },
+  water:     { label: "Water",     color: "var(--cat-water)", bg: "var(--cat-water-bg)", icon: "water" },
 };
 
 const TIPS: Record<string, string> = {
@@ -87,38 +88,61 @@ function pctVsAvg(total: number, avg: number) {
   return Math.round(((avg - total) / avg) * 100);
 }
 
+function goalCurrentKg(goal: Goal, entry: EmissionEntry | null) {
+  if (!entry) return goal.latestKg ?? null;
+  const values: Record<string, number> = {
+    transport: entry.transportKg,
+    energy: entry.energyKg,
+    diet: entry.dietKg,
+    shopping: entry.shoppingKg,
+    water: entry.waterKg,
+    overall: entry.totalKgPerYear,
+  };
+  return values[goal.category] ?? goal.latestKg ?? null;
+}
+
+function goalProgress(goal: Goal, currentKg: number | null) {
+  if (currentKg === null) return 0;
+  const denom = goal.baselineKg - goal.targetKg;
+  if (denom <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round(((goal.baselineKg - currentKg) / denom) * 100)));
+}
+
+function goalIsRegression(goal: Goal, currentKg: number | null) {
+  return currentKg !== null && currentKg > goal.baselineKg;
+}
+
+
 // ─── Donut chart ──────────────────────────────────────────────────────────────
 
 function DonutChart({ entry }: { entry: EmissionEntry }) {
   const cats = [
     { key: "transport", kg: entry.transportKg ?? 0 },
-    { key: "energy",    kg: entry.energyKg    ?? 0 },
-    { key: "diet",      kg: entry.dietKg      ?? 0 },
-    { key: "shopping",  kg: entry.shoppingKg  ?? 0 },
-    { key: "water",     kg: entry.waterKg     ?? 0 },
+    { key: "energy", kg: entry.energyKg ?? 0 },
+    { key: "diet", kg: entry.dietKg ?? 0 },
+    { key: "shopping", kg: entry.shoppingKg ?? 0 },
+    { key: "water", kg: entry.waterKg ?? 0 },
   ];
   const total = cats.reduce((s, c) => s + c.kg, 0) || 1;
-  const circumference = 2 * Math.PI * 38;
-  let offset = 0;
+  let cursor = 0;
+  const stops = cats.flatMap((c) => {
+    const start = cursor;
+    const end = cursor + (c.kg / total) * 360;
+    cursor = end;
+    const color = CAT_META[c.key].color;
+    const gap = Math.min(1.4, Math.max(0.45, (end - start) * 0.035));
+    return [`${color} ${start + gap}deg ${Math.max(start + gap, end - gap)}deg`, `transparent ${Math.max(start + gap, end - gap)}deg ${end}deg`];
+  });
   return (
-    <svg width="120" height="120" viewBox="0 0 100 100" style={{ flexShrink: 0 }}>
-      <circle cx="50" cy="50" r="38" fill="none" stroke="var(--dash-track)" strokeWidth="14" />
-      {cats.map((c) => {
-        const arc = (c.kg / total) * circumference;
-        const el = (
-          <circle key={c.key} cx="50" cy="50" r="38" fill="none"
-            stroke={CAT_META[c.key].color} strokeWidth="14"
-            strokeDasharray={`${arc} ${circumference - arc}`}
-            strokeDashoffset={-offset} transform="rotate(-90 50 50)" />
-        );
-        offset += arc;
-        return el;
-      })}
-      <text x="50" y="45" textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--dash-text-primary)">
-        {(total / 1000).toFixed(1)}t
-      </text>
-      <text x="50" y="58" textAnchor="middle" fontSize="9" fill="var(--dash-text-muted)">CO₂e/yr</text>
-    </svg>
+    <div className="dash-donut-orbit" aria-label={`Carbon share: ${(total / 1000).toFixed(1)} tonnes CO₂e per year`}>
+      <div className="dash-donut-ring" style={{ background: `conic-gradient(from -90deg, ${stops.join(", ")})` }}>
+        <div className="dash-donut-hole">
+          <strong>{(total / 1000).toFixed(1)}t</strong>
+          <span>CO₂e / yr</span>
+        </div>
+      </div>
+      <div className="dash-donut-ticks" aria-hidden="true" />
+    </div>
   );
 }
 
@@ -138,8 +162,8 @@ function Sparkline({ history }: { history: EmissionEntry[] }) {
   const trend = vals[vals.length - 1] < vals[0];
   return (
     <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: "block" }}>
-      <path d={d} fill="none" stroke={trend ? "#22c55e" : "#f43f5e"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={px(vals.length - 1)} cy={py(vals[vals.length - 1])} r="4" fill={trend ? "#22c55e" : "#f43f5e"} />
+      <path d={d} fill="none" stroke={trend ? "var(--chart-good)" : "var(--chart-bad)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={px(vals.length - 1)} cy={py(vals[vals.length - 1])} r="4" fill={trend ? "var(--chart-good)" : "var(--chart-bad)"} />
     </svg>
   );
 }
@@ -149,7 +173,7 @@ function Sparkline({ history }: { history: EmissionEntry[] }) {
 function WelcomeGate({ username, onStart }: { username: string; onStart: () => void }) {
   return (
     <div style={{ minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 20, padding: "2rem 1rem" }}>
-      <div style={{ fontSize: 48 }}>🌿</div>
+      <div className="dash-welcome-mark"><CarbonIcon name="leaf" size={34} /></div>
       <h2 style={{ fontSize: 22, fontWeight: 600, color: "var(--dash-text-primary)", margin: 0 }}>
         Welcome to Carbon Ledger, {username}
       </h2>
@@ -157,8 +181,8 @@ function WelcomeGate({ username, onStart }: { username: string; onStart: () => v
         Your dashboard is waiting — but first, complete your carbon footprint assessment. It takes about 3 minutes and covers transport, energy, diet, shopping, and water.
       </p>
       <div style={{ display: "flex", gap: 20, marginTop: 8, flexWrap: "wrap", justifyContent: "center" }}>
-        {["🚗 Transport", "⚡ Energy", "🥗 Diet", "🛍 Shopping", "💧 Water"].map((s) => (
-          <span key={s} style={{ fontSize: 12, color: "var(--dash-text-muted)" }}>{s}</span>
+        {["transport", "energy", "diet", "shopping", "water"].map((key) => (
+          <span key={key} className="dash-welcome-tag"><CarbonIcon name={CAT_META[key].icon as any} size={14} /> {CAT_META[key].label}</span>
         ))}
       </div>
       <button onClick={onStart} className="dash-btn-primary">Start your assessment →</button>
@@ -175,11 +199,11 @@ function NewEntryModal({ onClose, onSubmit, loading }: {
   loading: boolean;
 }) {
   const steps = [
-    { icon: "🚗", label: "Transport" },
-    { icon: "⚡", label: "Energy" },
-    { icon: "🥗", label: "Diet" },
-    { icon: "🛍️", label: "Shopping" },
-    { icon: "💧", label: "Water" },
+    { icon: "transport", label: "Transport" },
+    { icon: "energy", label: "Energy" },
+    { icon: "diet", label: "Diet" },
+    { icon: "shopping", label: "Shopping" },
+    { icon: "water", label: "Water" },
   ];
 
   return (
@@ -188,7 +212,7 @@ function NewEntryModal({ onClose, onSubmit, loading }: {
         <button className="dash-modal-close" onClick={onClose} aria-label="Close">✕</button>
 
         <div className="dash-modal-hero">
-          <div className="dash-modal-hero-icon">📊</div>
+          <div className="dash-modal-hero-icon"><CarbonIcon name="chart" size={28} /></div>
         </div>
 
         <div className="dash-modal-body">
@@ -200,7 +224,7 @@ function NewEntryModal({ onClose, onSubmit, loading }: {
           <div className="dash-modal-steps">
             {steps.map((s) => (
               <div key={s.label} className="dash-modal-step">
-                <span className="dash-modal-step-icon">{s.icon}</span>
+                <span className="dash-modal-step-icon"><CarbonIcon name={s.icon as any} size={17} /></span>
                 <span>{s.label}</span>
               </div>
             ))}
@@ -235,7 +259,7 @@ function DeleteEntryModal({ isLatest, activeGoals, onClose, onConfirm, loading }
         <button className="dash-modal-close" onClick={onClose} aria-label="Close">✕</button>
 
         <div className="dash-modal-hero">
-          <div className="dash-modal-hero-icon">🗑️</div>
+          <div className="dash-modal-hero-icon"><CarbonIcon name="trash" size={28} /></div>
         </div>
 
         <div className="dash-modal-body">
@@ -246,18 +270,9 @@ function DeleteEntryModal({ isLatest, activeGoals, onClose, onConfirm, loading }
 
           {showGoalWarning && (
             <div
-              style={{
-                background: "#fef3c7",
-                border: "1px solid #fde68a",
-                borderRadius: 8,
-                padding: "10px 14px",
-                fontSize: 12,
-                color: "#92400e",
-                textAlign: "left",
-                marginTop: 4,
-              }}
+              className="dash-delete-warning"
             >
-              ⚠️ This is your latest entry. Deleting it will recalculate progress for{" "}
+              <CarbonIcon name="warning" size={15} /> This is your latest entry. Deleting it will recalculate progress for{" "}
               <strong>{activeGoals.length}</strong> active goal{activeGoals.length !== 1 ? "s" : ""} against
               whatever entry becomes the new latest.
             </div>
@@ -269,7 +284,7 @@ function DeleteEntryModal({ isLatest, activeGoals, onClose, onConfirm, loading }
               className="dash-btn-primary"
               onClick={onConfirm}
               disabled={loading}
-              style={{ padding: "10px 22px", background: "#dc2626" }}
+              style={{ padding: "10px 22px", background: "var(--chart-bad-text)" }}
             >
               {loading ? "Deleting…" : "Delete entry"}
             </button>
@@ -437,7 +452,7 @@ export default function DashboardPage() {
           {/* ── Topbar ── */}
           <div className="dash-topbar">
             <div className="dash-brand">
-              <div className="dash-leaf">🌿</div>
+              <div className="dash-leaf"><CarbonIcon name="leaf" size={22} /></div>
               <div>
                 <h1>Carbon Ledger</h1>
                 <p>Personal emission tracker — {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}</p>
@@ -471,7 +486,7 @@ export default function DashboardPage() {
           </div>
 
           {/* ── Error ── */}
-          {error && <div className="dash-error">⚠️ {error} — check your Express server is running on port 8000.</div>}
+          {error && <div className="dash-error"><CarbonIcon name="warning" size={16} /> {error} — check your Express server is running on port 8000.</div>}
 
           {/* ── Welcome gate ── */}
           {!hasEntry ? (
@@ -481,15 +496,15 @@ export default function DashboardPage() {
               {/* ── Metric cards ── */}
               <div className="dash-metric-grid">
                 {[
-                  { cls: "green", icon: "🌍", bg: "#dcfce7", label: "Total CO₂e",  value: fmtT(total), delta: delta !== null ? (delta < 0 ? `↘ −${fmtT(Math.abs(delta))} vs last` : `↗ +${fmtT(delta)} vs last`) : "First entry", deltaType: delta !== null ? (delta < 0 ? "down" : "up") : "flat" },
-                  { cls: "blue",  icon: "🚗", bg: "#dbeafe", label: "Transport",   value: fmtT(latest?.transportKg ?? 0), delta: `${Math.round(((latest?.transportKg ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
-                  { cls: "amber", icon: "⚡", bg: "#fef3c7", label: "Energy",      value: fmtT(latest?.energyKg    ?? 0), delta: `${Math.round(((latest?.energyKg    ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
-                  { cls: "rose",  icon: "🥗", bg: "#ffe4e6", label: "Diet",        value: fmtT(latest?.dietKg      ?? 0), delta: `${Math.round(((latest?.dietKg      ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
-                  { cls: "cyan",  icon: "🛍️", bg: "#fdf4ff", label: "Shopping",   value: fmtT(latest?.shoppingKg  ?? 0), delta: `${Math.round(((latest?.shoppingKg  ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
-                  { cls: "teal",  icon: "💧", bg: "#cffafe", label: "Water",      value: fmtT(latest?.waterKg     ?? 0), delta: `${Math.round(((latest?.waterKg     ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
+                  { cls: "green", icon: "globe", bg: "var(--paper-2)", label: "Total CO₂e",  value: fmtT(total), delta: delta !== null ? (delta < 0 ? `↘ −${fmtT(Math.abs(delta))} vs last` : `↗ +${fmtT(delta)} vs last`) : "First entry", deltaType: delta !== null ? (delta < 0 ? "down" : "up") : "flat" },
+                  { cls: "blue",  icon: "transport", bg: "var(--cat-transport-bg)", label: "Transport",   value: fmtT(latest?.transportKg ?? 0), delta: `${Math.round(((latest?.transportKg ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
+                  { cls: "amber", icon: "energy", bg: "var(--cat-energy-bg)", label: "Energy",      value: fmtT(latest?.energyKg    ?? 0), delta: `${Math.round(((latest?.energyKg    ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
+                  { cls: "rose",  icon: "diet", bg: "var(--cat-diet-bg)", label: "Diet",        value: fmtT(latest?.dietKg      ?? 0), delta: `${Math.round(((latest?.dietKg      ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
+                  { cls: "cyan",  icon: "shopping", bg: "var(--cat-shopping-bg)", label: "Shopping",   value: fmtT(latest?.shoppingKg  ?? 0), delta: `${Math.round(((latest?.shoppingKg  ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
+                  { cls: "teal",  icon: "water", bg: "var(--cat-water-bg)", label: "Water",      value: fmtT(latest?.waterKg     ?? 0), delta: `${Math.round(((latest?.waterKg     ?? 0) / total) * 100)}% of total`, deltaType: "flat" },
                 ].map((m) => (
                   <div key={m.label} className={`dash-metric ${m.cls}`}>
-                    <div className="dash-m-icon" style={{ background: m.bg }}>{m.icon}</div>
+                    <div className="dash-m-icon" style={{ background: m.bg }}><CarbonIcon name={m.icon as any} size={19} /></div>
                     <div className="dash-m-label">{m.label}</div>
                     <div className="dash-m-value">{m.value.replace("t", "")}<span className="dash-m-unit">t</span></div>
                     <div className={`dash-m-delta ${m.deltaType}`}>{m.delta}</div>
@@ -551,9 +566,9 @@ export default function DashboardPage() {
                       <div style={{ paddingTop: ".8rem", borderTop: "1px solid var(--dash-border)" }}>
                         <div className="dash-vs-label">vs. global average ({fmtT(avg)})</div>
                         <div className="dash-vs-track">
-                          <div className="dash-vs-fill" style={{ width: barsIn ? `${Math.min(Math.abs(pct), 100)}%` : "0%", background: isGreen ? "#22c55e" : "#f43f5e", transition: "width 1.2s ease" }} />
+                          <div className="dash-vs-fill" style={{ width: barsIn ? `${Math.min(Math.abs(pct), 100)}%` : "0%", background: isGreen ? "var(--chart-good)" : "var(--chart-bad)", transition: "width 1.2s ease" }} />
                         </div>
-                        <div className="dash-vs-text" style={{ color: isGreen ? "#15803d" : "#dc2626" }}>
+                        <div className="dash-vs-text" style={{ color: isGreen ? "var(--chart-good-text)" : "var(--chart-bad-text)" }}>
                           {isGreen ? `${pct}% below` : `${Math.abs(pct)}% above`} global average
                         </div>
                       </div>
@@ -569,22 +584,22 @@ export default function DashboardPage() {
                       </div>
                       {[...cats].sort((a, b) => b.kg - a.kg).slice(0, 3).map((c) => (
                         <div key={c.key} className="dash-tip">
-                          <span style={{ fontSize: 16 }}>{CAT_META[c.key].icon}</span>
+                          <span className="dash-tip-icon"><CarbonIcon name={CAT_META[c.key].icon as any} size={17} /></span>
                           <span><strong>{CAT_META[c.key].label}:</strong> {TIPS[c.key]}</span>
                         </div>
                       ))}
                     </div>
 
                     {/* Climate budget */}
-                    <div className="dash-card">
+                    <div className="dash-card dash-budget-card">
                       <div className="dash-card-hd"><span className="dash-card-title">Climate budget context</span></div>
                       {[
-                        { label: "Your footprint",      kg: total, color: isGreen ? "#22c55e" : "#f43f5e" },
-                        { label: "Global average",      kg: avg,   color: "#9ca3af" },
-                        { label: "1.5°C target (2030)", kg: 2300,  color: "#3b82f6" },
+                        { label: "Your footprint",      kg: total, color: isGreen ? "var(--chart-good)" : "var(--chart-bad)" },
+                        { label: "Global average",      kg: avg,   color: "var(--chart-neutral)" },
+                        { label: "1.5°C target (2030)", kg: 2300,  color: "var(--chart-target)" },
                       ].map((r) => (
                         <div key={r.label} className="dash-bar-row">
-                          <span className="dash-bar-label" style={{ width: 120 }}>{r.label}</span>
+                          <span className="dash-bar-label">{r.label}</span>
                           <div className="dash-bar-track">
                             <div className="dash-bar-fill" style={{ width: barsIn ? `${Math.min((r.kg / 8000) * 100, 100)}%` : "0%", background: r.color }} />
                           </div>
@@ -641,7 +656,7 @@ export default function DashboardPage() {
                               { key: "water",     kg: e.waterKg },
                             ].map((c) => (
                               <span key={c.key} style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                                <span>{CAT_META[c.key].icon}</span>
+                                <span><CarbonIcon name={CAT_META[c.key].icon as any} size={13} /></span>
                                 <span>{fmtT(c.kg ?? 0)}</span>
                               </span>
                             ))}
@@ -652,7 +667,7 @@ export default function DashboardPage() {
                           {/* Fixed grid cell — always rendered so alignment holds even for
                               the oldest entry, which has no prior entry to diff against */}
                           {d !== null ? (
-  <div style={{ fontSize: 12, fontWeight: 600, color: d < 0 ? "#16a34a" : "#dc2626" }}>
+  <div style={{ fontSize: 12, fontWeight: 600, color: d < 0 ? "var(--chart-good-text)" : "var(--chart-bad-text)" }}>
     {d < 0 ? "↘" : "↗"} {d < 0 ? "−" : "+"}{fmtT(Math.abs(d))}
   </div>
 ) : <div />}
@@ -664,10 +679,10 @@ export default function DashboardPage() {
     color: "var(--dash-text-muted)", fontSize: 13, padding: "4px 6px",
     borderRadius: 6, transition: "background .15s, color .15s",
   }}
-  onMouseEnter={(ev) => { ev.currentTarget.style.background = "#fee2e2"; ev.currentTarget.style.color = "#dc2626"; }}
+  onMouseEnter={(ev) => { ev.currentTarget.style.background = "var(--danger-bg)"; ev.currentTarget.style.color = "var(--chart-bad-text)"; }}
   onMouseLeave={(ev) => { ev.currentTarget.style.background = "none"; ev.currentTarget.style.color = "var(--dash-text-muted)"; }}
 >
-  🗑
+  <CarbonIcon name="trash" size={15} />
 </button>
                         </div>
                       );
@@ -691,7 +706,7 @@ export default function DashboardPage() {
                     </div>
                     {goals.length === 0 ? (
                       <div style={{ textAlign: "center", padding: "2rem 1rem" }}>
-                        <div style={{ fontSize: 32, marginBottom: 8 }}>🎯</div>
+                        <div className="dash-goal-empty-icon"><CarbonIcon name="chart" size={24} /></div>
                         <p style={{ fontSize: 13, color: "var(--dash-text-muted)", marginBottom: 12 }}>
                           No goals set yet. Create your first reduction goal to start tracking progress.
                         </p>
@@ -702,28 +717,33 @@ export default function DashboardPage() {
                     ) : (
                       goals.filter((g) => g.status !== "cancelled").map((g) => {
                         const meta = CAT_META[g.category] ?? CAT_META.transport;
-                        const pctDone = Math.min(g.latestPctAchieved, 100);
+                        const currentKg = goalCurrentKg(g, latest);
+                        const pctDone = goalProgress(g, currentKg);
+                        const regression = goalIsRegression(g, currentKg);
                         const overdue = new Date(g.deadline) < new Date() && g.status === "active";
                         return (
                           <div key={g._id} className="dash-goal-row">
                             <div className="dash-goal-label-row">
                               <span className="dash-goal-name">
                                 <span className="dash-cat-pill" style={{ background: meta.bg, color: meta.color, marginRight: 6 }}>
-                                  {meta.icon} {meta.label}
+                                  <CarbonIcon name={meta.icon as any} size={13} /> {meta.label}
                                 </span>
                                 {g.title}
                               </span>
-                              <span className="dash-goal-meta">{pctDone}%</span>
-                            </div>
-                            <div className="dash-goal-track">
-                              <div className="dash-goal-fill" style={{ width: barsIn ? `${pctDone}%` : "0%", background: pctDone >= 100 ? "#22c55e" : meta.color }} />
-                            </div>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-                              <span style={{ fontSize: 11, color: "var(--dash-text-muted)" }}>
-                                Target: {fmtT(g.targetKg)} by {fmtDate(g.deadline)}
+                              <span className={`dash-goal-meta ${regression ? "is-regression" : ""}`}>
+                                {regression ? "0% · above baseline" : `${pctDone}%`}
                               </span>
-                              {overdue && <span style={{ fontSize: 11, color: "#dc2626" }}>Overdue</span>}
-                              {g.status === "achieved" && <span style={{ fontSize: 11, color: "#16a34a" }}>✓ Achieved</span>}
+                            </div>
+                            <div className={`dash-goal-track ${regression ? "is-regression" : ""}`}>
+                              <div className="dash-goal-fill" style={{ width: barsIn ? `${pctDone}%` : "0%", background: g.status === "achieved" ? "#1f6f68" : meta.color }} />
+                            </div>
+                            <div className="dash-goal-status-row">
+                              <span>Target: {fmtT(g.targetKg)} by {fmtDate(g.deadline)}</span>
+                              {regression && currentKg !== null && (
+                                <span className="dash-goal-regression">↑ {fmtT(currentKg - g.baselineKg)} above baseline</span>
+                              )}
+                              {!regression && overdue && <span className="dash-goal-regression">Overdue</span>}
+                              {!regression && g.status === "achieved" && <span className="dash-goal-achieved">✓ Achieved</span>}
                             </div>
                           </div>
                         );
@@ -743,7 +763,7 @@ export default function DashboardPage() {
                         <div key={c.key} className="dash-tip" style={{ flexDirection: "column", gap: 8 }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ fontSize: 15 }}>{meta.icon}</span>
+                              <span style={{ fontSize: 15 }}><CarbonIcon name={meta.icon as any} size={15} /></span>
                               <strong style={{ fontSize: 12, color: "var(--dash-text-primary)" }}>Cut {meta.label.toLowerCase()} by 20%</strong>
                             </div>
                             <button

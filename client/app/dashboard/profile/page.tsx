@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import "./profile.css";
 import { apiFetch, AuthExpiredError, API, avatarUrl } from "../../lib/api";
+import CarbonIcon from "../../components/CarbonIcon";
 
 interface StoredUser {
   _id: string;
@@ -69,18 +70,18 @@ const CONTINENTS = [
 ];
 
 const HOME_TYPES = [
-  { val: "apartment",   label: "🏢 Apartment" },
-  { val: "small_house", label: "🏠 Small house" },
-  { val: "large_house", label: "🏡 Large house" },
-  { val: "shared",      label: "🏘️ Shared / co-living" },
+  { val: "apartment",   label: "Apartment" },
+  { val: "small_house", label: "Small house" },
+  { val: "large_house", label: "Large house" },
+  { val: "shared",      label: "Shared / co-living" },
 ];
 
 const OCCUPATIONS = [
-  { val: "office_based", label: "🏢 Office-based" },
-  { val: "remote",       label: "💻 Remote / work from home" },
-  { val: "hybrid",       label: "🔄 Hybrid" },
-  { val: "outdoor",      label: "🌳 Outdoor / field work" },
-  { val: "student",      label: "🎓 Student" },
+  { val: "office_based", label: "Office-based" },
+  { val: "remote",       label: "Remote / work from home" },
+  { val: "hybrid",       label: "Hybrid" },
+  { val: "outdoor",      label: "Outdoor / field work" },
+  { val: "student",      label: "Student" },
   { val: "other",        label: "⋯ Other" },
 ];
 
@@ -290,7 +291,7 @@ export default function ProfilePage() {
         {/* Topbar */}
         <div className="profile-topbar">
           <div className="profile-brand">
-            <div className="profile-leaf">🌿</div>
+            <div className="profile-leaf"><CarbonIcon name="leaf" size={21} /></div>
             <span className="profile-brand-name">Carbon Ledger</span>
           </div>
           <button className="profile-back" onClick={() => router.push("/dashboard")}>← Dashboard</button>
@@ -339,13 +340,13 @@ export default function ProfilePage() {
                 </div>
               )}
               {avatarUploading && <div className="profile-email">Uploading photo…</div>}
-              {avatarError && <div className="profile-error" style={{ marginTop: 6 }}>⚠️ {avatarError}</div>}
+              {avatarError && <div className="profile-error" style={{ marginTop: 6 }}><CarbonIcon name="warning" size={14} /> {avatarError}</div>}
             </div>
             <button className="profile-logout-btn" onClick={handleLogout}>Sign out</button>
           </div>
         )}
 
-        {error && <div className="profile-error">⚠️ {error}</div>}
+        {error && <div className="profile-error"><CarbonIcon name="warning" size={14} /> {error}</div>}
 
         {loading ? (
           <div style={{ textAlign: "center", padding: "2rem", color: "var(--m)", fontSize: 13 }}>Loading profile…</div>
@@ -353,7 +354,7 @@ export default function ProfilePage() {
           <form onSubmit={handleSave}>
             {/* Location */}
             <div className="profile-card">
-              <div className="profile-card-title">📍 Location</div>
+              <div className="profile-card-title"><CarbonIcon name="pin" size={16} /> Location</div>
               <div className="pf-grid">
                 <div className="pf-field">
                   <label className="pf-label">Country</label>
@@ -372,7 +373,7 @@ export default function ProfilePage() {
 
             {/* Household */}
             <div className="profile-card">
-              <div className="profile-card-title">🏠 Household</div>
+              <div className="profile-card-title"><CarbonIcon name="home" size={16} /> Household</div>
               <div className="pf-field">
                 <label className="pf-label">People in household</label>
                 <input className="pf-input" type="number" min="1" max="20" value={form.householdSize}
@@ -393,7 +394,7 @@ export default function ProfilePage() {
 
             {/* Lifestyle */}
             <div className="profile-card">
-              <div className="profile-card-title">💼 Lifestyle</div>
+              <div className="profile-card-title"><CarbonIcon name="work" size={16} /> Lifestyle</div>
               <div className="pf-field">
                 <label className="pf-label">Work style</label>
                 <div className="pf-radio-row">
@@ -433,7 +434,7 @@ export default function ProfilePage() {
 
         {/* Account settings */}
         <div className="profile-card">
-          <div className="profile-card-title">🔐 Account settings</div>
+          <div className="profile-card-title"><CarbonIcon name="settings" size={16} /> Account settings</div>
 
           <form onSubmit={handleAccountSave}>
             <div className="pf-field">
@@ -508,7 +509,7 @@ export default function ProfilePage() {
 
         {/* Danger zone */}
         <div className="profile-danger" style={{ marginTop: "1.5rem" }}>
-          <div className="profile-danger-title">⚠️ Account</div>
+          <div className="profile-danger-title"><CarbonIcon name="warning" size={16} /> Account</div>
           <div className="profile-danger-sub">Sign out of Carbon Ledger on this device.</div>
           <button className="profile-logout-btn" onClick={handleLogout} style={{ width: "auto" }}>
             Sign out
