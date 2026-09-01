@@ -49,7 +49,6 @@ Both themes are designed to preserve readability across dashboard cards, charts,
 
 ## 📸 Screenshots
 
-Replace these images with your latest screenshots when you're ready to push the updated project to GitHub.
 
 | Dashboard | Goals |
 |---|---|
